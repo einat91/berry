@@ -1,13 +1,13 @@
 "use client"
 
-import React, { useState } from "react"
+import type React from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
-import { signInWithPopup } from "firebase/auth"
-import { auth, provider } from "@/lib/firebaseConfig"
+import Image from "next/image"
 
 interface User {
   id: string
@@ -23,40 +23,74 @@ interface LoginPageProps {
 
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<string>("signup")
-  const [firstName, setFirstName] = useState("")
   const [familyCode, setFamilyCode] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
   const handleGoogleLogin = async (isJoining = false) => {
     setError("")
+    setLoading(true)
 
-    if (activeTab === "join" && !familyCode) {
+    if (isJoining && !familyCode) {
       setError("Please enter a family code")
-      return
-    }
-
-    if ((activeTab === "signup" || activeTab === "login") && !firstName) {
-      setError("Please enter your first name")
+      setLoading(false)
       return
     }
 
     try {
+      const { signInWithPopup } = await import("firebase/auth")
+      const { auth, provider, db } = await import("@/lib/firebaseConfig")
+      const { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, arrayUnion } = await import(
+        "firebase/firestore"
+      )
+
       const result = await signInWithPopup(auth, provider)
       const user = result.user
+
+      // Get user's first name from display name
+      const firstName = user.displayName?.split(" ")[0] || "Dog Parent"
 
       const loggedInUser: User = {
         id: user.uid,
         name: user.displayName || "Dog Parent",
         email: user.email || "",
         avatar: user.photoURL || "/placeholder.svg",
-        firstName: firstName || user.displayName?.split(" ")[0] || "Dog Parent",
+        firstName,
       }
 
-      // TODO: optionally store familyCode and user in Firestore
-      onLogin(loggedInUser)
+      // Check if user already exists
+      const userDocRef = doc(db, "users", user.uid)
+      const userDoc = await getDoc(userDocRef)
+
+      if (userDoc.exists() && userDoc.data()?.dogName) {
+        // User exists and has completed setup, just log them in
+        onLogin(loggedInUser)
+      } else if (isJoining) {
+        // User is joining a family
+        // For now, we'll just create a user document and let them set up
+        await setDoc(userDocRef, {
+          firstName,
+          email: user.email,
+          createdAt: new Date(),
+          joiningWithCode: familyCode.toUpperCase(),
+        })
+
+        onLogin(loggedInUser)
+      } else {
+        // New user signing up - will be directed to setup page
+        await setDoc(userDocRef, {
+          firstName,
+          email: user.email,
+          createdAt: new Date(),
+        })
+
+        onLogin(loggedInUser)
+      }
     } catch (err: any) {
       console.error("Login error:", err)
       setError("Failed to log in. Please try again.")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -65,7 +99,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-            <img src="/images/berry-logo.png" alt="Berry" className="h-12" />
+            <Image src="/images/berry-logo.png" alt="Berry" width={100} height={100} />
           </div>
           <CardTitle className="text-2xl font-bold">Welcome to Berry</CardTitle>
           <CardDescription>Track your dog's daily activities with your family</CardDescription>
@@ -80,19 +114,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
             <TabsContent value="signup">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">Your First Name</Label>
-                  <Input
-                    id="firstName"
-                    placeholder="Enter your first name"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                  />
-                </div>
-
-                <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12">
+                <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
                   <GoogleIcon className="w-5 h-5 mr-3" />
-                  Sign up with Google
+                  {loading ? "Signing up..." : "Sign up with Google"}
                 </Button>
 
                 {error && <p className="text-sm text-red-500 text-center">{error}</p>}
@@ -105,19 +129,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
             <TabsContent value="login">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="loginFirstName">Your First Name</Label>
-                  <Input
-                    id="loginFirstName"
-                    placeholder="Enter your first name"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                  />
-                </div>
-
-                <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12">
+                <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
                   <GoogleIcon className="w-5 h-5 mr-3" />
-                  Log in with Google
+                  {loading ? "Logging in..." : "Log in with Google"}
                 </Button>
 
                 {error && <p className="text-sm text-red-500 text-center">{error}</p>}
@@ -126,16 +140,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
             <TabsContent value="join">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="joinFirstName">Your First Name</Label>
-                  <Input
-                    id="joinFirstName"
-                    placeholder="Enter your first name"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                  />
-                </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="familyCode">Family Code</Label>
                   <Input
@@ -148,9 +152,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   />
                 </div>
 
-                <Button onClick={() => handleGoogleLogin(true)} className="w-full h-12">
+                <Button onClick={() => handleGoogleLogin(true)} className="w-full h-12" disabled={loading}>
                   <GoogleIcon className="w-5 h-5 mr-3" />
-                  Join with Google
+                  {loading ? "Joining..." : "Join with Google"}
                 </Button>
 
                 {error && <p className="text-sm text-red-500 text-center">{error}</p>}

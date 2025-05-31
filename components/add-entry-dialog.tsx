@@ -15,6 +15,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { format } from "date-fns"
 
 interface Entry {
   type: "pee" | "poop" | "food"
@@ -28,9 +29,10 @@ interface AddEntryDialogProps {
   onOpenChange: (open: boolean) => void
   type: "pee" | "poop" | "food"
   onAdd: (entry: Entry) => void
+  selectedDate: Date
 }
 
-export function AddEntryDialog({ open, onOpenChange, type, onAdd }: AddEntryDialogProps) {
+export function AddEntryDialog({ open, onOpenChange, type, onAdd, selectedDate }: AddEntryDialogProps) {
   const [notes, setNotes] = useState("")
   const [amount, setAmount] = useState("")
   const [foodType, setFoodType] = useState("")
@@ -66,13 +68,15 @@ export function AddEntryDialog({ open, onOpenChange, type, onAdd }: AddEntryDial
   }
 
   const getDescription = () => {
+    const dateText = format(selectedDate, "MMM d, yyyy")
+
     switch (type) {
       case "pee":
-        return "Log a pee break for your dog"
+        return `Log a pee break for your dog on ${dateText}`
       case "poop":
-        return "Log a poop break for your dog"
+        return `Log a poop break for your dog on ${dateText}`
       case "food":
-        return "Log a meal for your dog"
+        return `Log a meal for your dog on ${dateText}`
     }
   }
 
