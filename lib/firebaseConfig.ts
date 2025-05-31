@@ -1,6 +1,6 @@
 "use client"
 
-import { initializeApp, getApps } from "firebase/app"
+import { initializeApp, getApps, getApp } from "firebase/app"
 import { getAuth, GoogleAuthProvider } from "firebase/auth"
 import { getFirestore } from "firebase/firestore"
 import { getStorage } from "firebase/storage"
@@ -16,20 +16,22 @@ const firebaseConfig = {
   measurementId: "G-79MK22LMPH",
 }
 
-// Initialize Firebase only on client side
+// Initialize Firebase
 let app, auth, db, storage, provider
 
-// Check if we're in the browser environment
+let firebaseInitialized = false
+
+// Only initialize on client side
 if (typeof window !== "undefined") {
   try {
-    // Initialize Firebase app first
-    if (!getApps().length) {
+    // Initialize or get existing Firebase app
+    if (getApps().length === 0) {
       app = initializeApp(firebaseConfig)
     } else {
-      app = getApps()[0]
+      app = getApp()
     }
 
-    // Then initialize services
+    // Initialize services with the app instance
     auth = getAuth(app)
     db = getFirestore(app)
     storage = getStorage(app)
@@ -39,14 +41,15 @@ if (typeof window !== "undefined") {
     provider.setCustomParameters({
       prompt: "select_account",
     })
+
+    firebaseInitialized = true
+    console.log("Firebase initialized successfully")
   } catch (error) {
     console.error("Error initializing Firebase:", error)
+    firebaseInitialized = false
   }
 }
 
-// Export a function to check if Firebase is initialized
-export const isFirebaseInitialized = () => {
-  return !!auth && !!db && !!storage && !!provider
-}
+export const isFirebaseInitialized = () => firebaseInitialized
 
 export { auth, db, storage, provider }
