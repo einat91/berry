@@ -17,6 +17,7 @@ import {
   Utensils,
   User,
   FileText,
+  Dog,
 } from "lucide-react"
 import { format, addDays, subDays, isToday } from "date-fns"
 import Image from "next/image"
@@ -254,7 +255,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       case "pee":
         return "bg-yellow-100 text-yellow-700"
       case "poop":
-        return "bg-amber-100 text-amber-700"
+        return "bg-amber-100 text-amber-800"
       case "food":
         return "bg-blue-100 text-blue-700"
     }
@@ -340,85 +341,75 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       <main className="max-w-md mx-auto p-4">
         {/* Date Navigation */}
-        <div className="bg-white rounded-xl p-6 shadow-sm mb-6 border border-gray-100">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goToPreviousDay}
-              className="h-10 w-10 rounded-full hover:bg-gray-100"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-            <div className="text-center">
-              <div className="flex items-center gap-3 text-blue-600">
-                <div className="p-2 bg-blue-50 rounded-full">
-                  <CalendarIcon className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="font-semibold text-lg text-black">{format(selectedDate, "dd/MM/yyyy")}</div>
-                </div>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goToNextDay}
-              disabled={isToday(selectedDate) || selectedDate > new Date()}
-              className="h-10 w-10 rounded-full hover:bg-gray-100 disabled:opacity-50"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </Button>
+        <div className="bg-white rounded-xl p-4 shadow-sm mb-6 border border-gray-100 flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToPreviousDay}
+            className="h-8 w-8 rounded-full hover:bg-gray-100"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-2 text-gray-600">
+            <CalendarIcon className="h-4 w-4" />
+            <div className="text-sm">{format(selectedDate, "dd/MM/yyyy")}</div>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToNextDay}
+            disabled={isToday(selectedDate) || selectedDate > new Date()}
+            className="h-8 w-8 rounded-full hover:bg-gray-100 disabled:opacity-50"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
 
         {/* Dog Info */}
-        <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">{dogName}</h1>
+        <div className="flex items-center justify-center gap-2 mb-6">
+          <Dog className="h-5 w-5 text-gray-600" />
+          <h1 className="text-lg text-gray-600">{dogName}</h1>
         </div>
 
         {/* Log Activity Card */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="font-bold text-lg mb-6 text-gray-900">Log Activity</h2>
+          <h2 className="text-base text-gray-600 mb-6">Log Activity</h2>
 
           {/* Activity Type Buttons */}
           <div className="grid grid-cols-3 gap-4 mb-6">
-            <Button
-              variant="outline"
-              className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
+            <button
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
                 selectedActivity === "pee"
-                  ? "border-yellow-500 bg-yellow-100 text-yellow-800"
-                  : "border-gray-200 hover:bg-gray-50"
+                  ? "bg-yellow-500 text-white border-yellow-500"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("pee")}
             >
               <Droplets className="h-6 w-6" />
               <span className="font-medium">Pee</span>
-            </Button>
-            <Button
-              variant="outline"
-              className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
+            </button>
+            <button
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
                 selectedActivity === "poop"
-                  ? "border-amber-600 bg-amber-100 text-amber-800"
-                  : "border-gray-200 hover:bg-gray-50"
+                  ? "bg-amber-700 text-white border-amber-700"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("poop")}
             >
               <Circle className="h-6 w-6" />
               <span className="font-medium">Poop</span>
-            </Button>
-            <Button
-              variant="outline"
-              className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
+            </button>
+            <button
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
                 selectedActivity === "food"
-                  ? "border-blue-500 bg-blue-100 text-blue-800"
-                  : "border-gray-200 hover:bg-gray-50"
+                  ? "bg-blue-500 text-white border-blue-500"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("food")}
             >
               <Utensils className="h-6 w-6" />
               <span className="font-medium">Food</span>
-            </Button>
+            </button>
           </div>
 
           {/* Time and Added By */}
@@ -467,25 +458,23 @@ export function DashboardPage({ user }: DashboardPageProps) {
           )}
 
           {/* Note */}
-          {selectedActivity && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <FileText className="h-4 w-4" />
-                <span>Note</span>
-              </div>
-              <Textarea
-                placeholder="Quick note..."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={2}
-                className="text-sm"
-              />
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+              <FileText className="h-4 w-4" />
+              <span>Note</span>
             </div>
-          )}
+            <Textarea
+              placeholder="Quick note..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              className="text-sm"
+            />
+          </div>
 
           {/* Log Button */}
           <Button
-            className="w-full bg-black hover:bg-gray-800 text-white font-medium py-3"
+            className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3"
             onClick={handleLogActivity}
             disabled={selectedDate > new Date()}
           >
@@ -495,7 +484,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
         {/* Activities */}
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="font-bold text-lg mb-4 text-gray-900">Activities</h2>
+          <h2 className="text-base text-gray-600 mb-4">Activities</h2>
           {entries.length === 0 ? (
             <div className="text-center py-8">
               <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
@@ -514,15 +503,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {getActivityIcon(entry.type)}
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold text-gray-900">
-                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
-                      </div>
+                      <div className="text-gray-600">{entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}</div>
                       <div className="text-sm text-gray-600">{entry.addedBy}</div>
                       {entry.amount && <div className="text-sm text-blue-600 font-medium">{entry.amount}</div>}
                       {entry.notes && <div className="text-sm text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
                     <div className="text-right">
-                      <div className="font-medium text-gray-900">{format(entry.timestamp, "h:mm a")}</div>
+                      <div className="text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
                     </div>
                   </div>
                 ))}
