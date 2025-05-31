@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { auth, db } from "@/firebase/config";
+import { auth, db } from "@/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import Image from "next/image";
