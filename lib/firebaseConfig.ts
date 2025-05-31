@@ -1,5 +1,9 @@
 "use client"
 
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyAspERiSvjnYH021jsvo04n4kyz3LlP_R4",
@@ -112,3 +116,11 @@ export const auth = firebaseAuth
 export const db = firebaseDb
 export const storage = firebaseStorage
 export const provider = googleProvider
+
+
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+export { auth, db };
