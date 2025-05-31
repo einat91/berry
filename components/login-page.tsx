@@ -1,13 +1,14 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
+
+import { signInWithPopup } from "firebase/auth"
+import { auth, provider } from "@/lib/firebase"
 
 interface User {
   id: string
@@ -27,7 +28,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [familyCode, setFamilyCode] = useState("")
   const [error, setError] = useState("")
 
-  const handleGoogleLogin = (isJoining = false) => {
+  const handleGoogleLogin = async (isJoining = false) => {
+    setError("")
+
     if (activeTab === "join" && !familyCode) {
       setError("Please enter a family code")
       return
@@ -38,39 +41,24 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       return
     }
 
-    // Mock Google login - in real app, this would use NextAuth with Google provider
-    const mockUser: User = {
-      id: Date.now().toString(),
-      name: "Dog Parent",
-      email: "parent@example.com",
-      avatar: "/placeholder.svg?height=32&width=32",
-      firstName: firstName,
-    }
+    try {
+      const result = await signInWithPopup(auth, provider)
+      const user = result.user
 
-    // If joining a family, we'd validate the family code here
-    if (isJoining) {
-      // In a real app, we would check if the family code exists
-      const savedDogInfo = localStorage.getItem("berry-dog-info")
-      if (savedDogInfo) {
-        const dogInfo = JSON.parse(savedDogInfo)
-        if (dogInfo.familyCode === familyCode) {
-          // Add the new member to the family
-          dogInfo.members.push({
-            id: mockUser.id,
-            name: mockUser.name,
-            email: mockUser.email,
-            avatar: mockUser.avatar,
-          })
-          localStorage.setItem("berry-dog-info", JSON.stringify(dogInfo))
-          onLogin(mockUser)
-          return
-        }
+      const loggedInUser: User = {
+        id: user.uid,
+        name: user.displayName || "Dog Parent",
+        email: user.email || "",
+        avatar: user.photoURL || "/placeholder.svg",
+        firstName: firstName || user.displayName?.split(" ")[0] || "Dog Parent",
       }
-      setError("Invalid family code")
-      return
-    }
 
-    onLogin(mockUser)
+      // TODO: optionally store familyCode and user in Firestore
+      onLogin(loggedInUser)
+    } catch (err: any) {
+      console.error("Login error:", err)
+      setError("Failed to log in. Please try again.")
+    }
   }
 
   return (
