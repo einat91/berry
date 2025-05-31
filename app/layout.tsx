@@ -10,8 +10,10 @@ export const metadata: Metadata = {
   description: "Track your dog's daily activities with your family",
   icons: {
     icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
   },
-    generator: 'v0.dev'
+  generator: "v0.dev",
 }
 
 export default function RootLayout({

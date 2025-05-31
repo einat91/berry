@@ -1,7 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -24,10 +25,33 @@ interface LoginPageProps {
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<string>("signup")
   const [familyCode, setFamilyCode] = useState("")
+  const [firstName, setFirstName] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [firebaseReady, setFirebaseReady] = useState(false)
+
+  // Initialize Firebase when component mounts
+  useEffect(() => {
+    const initFirebase = async () => {
+      try {
+        const { initializeFirebase } = await import("@/lib/firebaseConfig")
+        await initializeFirebase()
+        setFirebaseReady(true)
+      } catch (error) {
+        console.error("Failed to initialize Firebase:", error)
+        setError("Failed to initialize app. Please refresh the page.")
+      }
+    }
+
+    initFirebase()
+  }, [])
 
   const handleGoogleLogin = async (isJoining = false) => {
+    if (!firebaseReady) {
+      setError("App is still loading. Please wait a moment.")
+      return
+    }
+
     setError("")
     setLoading(true)
 
@@ -37,25 +61,32 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       return
     }
 
+    if (!firstName.trim()) {
+      setError("Please enter your first name")
+      setLoading(false)
+      return
+    }
+
     try {
+      // Get Firebase services
+      const { getFirebaseServices } = await import("@/lib/firebaseConfig")
+      const { auth, provider, db } = await getFirebaseServices()
+
+      // Import Firebase functions
       const { signInWithPopup } = await import("firebase/auth")
-      const { auth, provider, db } = await import("@/lib/firebaseConfig")
-      const { doc, getDoc, setDoc, collection, query, where, getDocs, updateDoc, arrayUnion } = await import(
+      const { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs } = await import(
         "firebase/firestore"
       )
 
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
-      // Get user's first name from display name
-      const firstName = user.displayName?.split(" ")[0] || "Dog Parent"
-
       const loggedInUser: User = {
         id: user.uid,
         name: user.displayName || "Dog Parent",
         email: user.email || "",
         avatar: user.photoURL || "/placeholder.svg",
-        firstName,
+        firstName: firstName.trim(),
       }
 
       // Check if user already exists
@@ -66,20 +97,42 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         // User exists and has completed setup, just log them in
         onLogin(loggedInUser)
       } else if (isJoining) {
-        // User is joining a family
-        // For now, we'll just create a user document and let them set up
+        // User is joining a family - find the family with this code
+        const usersRef = collection(db, "users")
+        const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
+        const querySnapshot = await getDocs(q)
+
+        if (querySnapshot.empty) {
+          setError("Invalid family code. Please check and try again.")
+          setLoading(false)
+          return
+        }
+
+        // Get the family data from the first matching user
+        const familyDoc = querySnapshot.docs[0]
+        const familyData = familyDoc.data()
+
+        // Add this user to the family
+        await updateDoc(doc(db, "users", familyDoc.id), {
+          familyMembers: arrayUnion(firstName.trim()),
+        })
+
+        // Create user document with family data
         await setDoc(userDocRef, {
-          firstName,
+          firstName: firstName.trim(),
           email: user.email,
+          dogName: familyData.dogName,
+          familyMembers: [...familyData.familyMembers, firstName.trim()],
+          familyCode: familyData.familyCode,
+          photoUrl: familyData.photoUrl,
           createdAt: new Date(),
-          joiningWithCode: familyCode.toUpperCase(),
         })
 
         onLogin(loggedInUser)
       } else {
         // New user signing up - will be directed to setup page
         await setDoc(userDocRef, {
-          firstName,
+          firstName: firstName.trim(),
           email: user.email,
           createdAt: new Date(),
         })
@@ -99,70 +152,119 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
-            <Image src="/images/berry-logo.png" alt="Berry" width={100} height={100} />
+            <Image src="/images/berry-logo.png" alt="Berry" width={200} height={60} />
           </div>
           <CardTitle className="text-2xl font-bold">Welcome to Berry</CardTitle>
           <CardDescription>Track your dog's daily activities with your family</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="signup" value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-3 mb-6">
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-              <TabsTrigger value="login">Log In</TabsTrigger>
-              <TabsTrigger value="join">Join Family</TabsTrigger>
-            </TabsList>
+          {!firebaseReady ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
+              <p className="text-gray-600">Initializing app...</p>
+            </div>
+          ) : (
+            <Tabs defaultValue="signup" value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid grid-cols-3 mb-6">
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                <TabsTrigger value="login">Log In</TabsTrigger>
+                <TabsTrigger value="join">Join Family</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="signup">
-              <div className="space-y-4">
-                <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
-                  <GoogleIcon className="w-5 h-5 mr-3" />
-                  {loading ? "Signing up..." : "Sign up with Google"}
-                </Button>
+              <TabsContent value="signup">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName">Your First Name</Label>
+                    <Input
+                      id="firstName"
+                      placeholder="Enter your first name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                    />
+                  </div>
 
-                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                  <Button
+                    onClick={() => handleGoogleLogin(false)}
+                    className="w-full h-12"
+                    disabled={loading || !firebaseReady}
+                  >
+                    <GoogleIcon className="w-5 h-5 mr-3" />
+                    {loading ? "Signing up..." : "Sign up with Google"}
+                  </Button>
 
-                <p className="text-xs text-center text-gray-600 mt-4">
-                  You'll create a new family account for your dog
-                </p>
-              </div>
-            </TabsContent>
+                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
-            <TabsContent value="login">
-              <div className="space-y-4">
-                <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
-                  <GoogleIcon className="w-5 h-5 mr-3" />
-                  {loading ? "Logging in..." : "Log in with Google"}
-                </Button>
-
-                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="join">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="familyCode">Family Code</Label>
-                  <Input
-                    id="familyCode"
-                    placeholder="Enter the 6-digit family code"
-                    value={familyCode}
-                    onChange={(e) => setFamilyCode(e.target.value.toUpperCase())}
-                    className="font-mono"
-                    maxLength={6}
-                  />
+                  <p className="text-xs text-center text-gray-600 mt-4">
+                    You'll create a new family account for your dog
+                  </p>
                 </div>
+              </TabsContent>
 
-                <Button onClick={() => handleGoogleLogin(true)} className="w-full h-12" disabled={loading}>
-                  <GoogleIcon className="w-5 h-5 mr-3" />
-                  {loading ? "Joining..." : "Join with Google"}
-                </Button>
+              <TabsContent value="login">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="loginFirstName">Your First Name</Label>
+                    <Input
+                      id="loginFirstName"
+                      placeholder="Enter your first name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                    />
+                  </div>
 
-                {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                  <Button
+                    onClick={() => handleGoogleLogin(false)}
+                    className="w-full h-12"
+                    disabled={loading || !firebaseReady}
+                  >
+                    <GoogleIcon className="w-5 h-5 mr-3" />
+                    {loading ? "Logging in..." : "Log in with Google"}
+                  </Button>
 
-                <p className="text-xs text-center text-gray-600 mt-4">Ask your family member for the 6-digit code</p>
-              </div>
-            </TabsContent>
-          </Tabs>
+                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="join">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="joinFirstName">Your First Name</Label>
+                    <Input
+                      id="joinFirstName"
+                      placeholder="Enter your first name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="familyCode">Family Code</Label>
+                    <Input
+                      id="familyCode"
+                      placeholder="Enter the 6-digit family code"
+                      value={familyCode}
+                      onChange={(e) => setFamilyCode(e.target.value.toUpperCase())}
+                      className="font-mono"
+                      maxLength={6}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => handleGoogleLogin(true)}
+                    className="w-full h-12"
+                    disabled={loading || !firebaseReady}
+                  >
+                    <GoogleIcon className="w-5 h-5 mr-3" />
+                    {loading ? "Joining..." : "Join Family with Google"}
+                  </Button>
+
+                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+
+                  <p className="text-xs text-center text-gray-600 mt-4">Ask your family member for the 6-digit code</p>
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
         </CardContent>
       </Card>
     </div>
