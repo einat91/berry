@@ -136,14 +136,86 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     } catch (err: any) {
       console.error("Login error:", err)
 
-      // Handle unauthorized domain error with helpful message
+      // Handle unauthorized domain error - try anonymous login as fallback
       if (err.code === "auth/unauthorized-domain") {
-        setError("This domain is not authorized. Please add this domain to Firebase authorized domains in the console.")
+        console.log("Google login failed, trying anonymous login...")
+        await handleAnonymousLogin(isJoining)
       } else {
         setError(err.message || "Failed to log in. Please try again.")
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAnonymousLogin = async (isJoining = false) => {
+    try {
+      const auth: any = await getAuth()
+      const db: any = await getDb()
+
+      const { signInAnonymously } = await import("firebase/auth")
+      const { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs } = await import(
+        "firebase/firestore"
+      )
+
+      const result = await signInAnonymously(auth)
+      const user = result.user
+
+      const loggedInUser: User = {
+        id: user.uid,
+        name: firstName.trim() || "Dog Parent",
+        email: "",
+        avatar: "/placeholder.svg",
+        firstName: firstName.trim(),
+      }
+
+      // Check if user already exists
+      const userDocRef = doc(db, "users", user.uid)
+      const userDoc = await getDoc(userDocRef)
+
+      if (userDoc.exists() && userDoc.data()?.dogName) {
+        onLogin(loggedInUser)
+      } else if (isJoining) {
+        const usersRef = collection(db, "users")
+        const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
+        const querySnapshot = await getDocs(q)
+
+        if (querySnapshot.empty) {
+          setError("Invalid family code. Please check and try again.")
+          setLoading(false)
+          return
+        }
+
+        const familyDoc = querySnapshot.docs[0]
+        const familyData = familyDoc.data()
+
+        await updateDoc(doc(db, "users", familyDoc.id), {
+          familyMembers: arrayUnion(firstName.trim()),
+        })
+
+        await setDoc(userDocRef, {
+          firstName: firstName.trim(),
+          email: "",
+          dogName: familyData.dogName,
+          familyMembers: [...familyData.familyMembers, firstName.trim()],
+          familyCode: familyData.familyCode,
+          photoUrl: familyData.photoUrl,
+          createdAt: new Date(),
+        })
+
+        onLogin(loggedInUser)
+      } else {
+        await setDoc(userDocRef, {
+          firstName: firstName.trim(),
+          email: "",
+          createdAt: new Date(),
+        })
+
+        onLogin(loggedInUser)
+      }
+    } catch (err: any) {
+      console.error("Anonymous login error:", err)
+      setError("Failed to create account. Please try again.")
     }
   }
 
