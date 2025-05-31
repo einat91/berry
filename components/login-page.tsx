@@ -6,9 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
-
 import { signInWithPopup } from "firebase/auth"
-import { auth, provider } from "@/lib/firebase"
+import { auth, provider } from "@/lib/firebaseConfig"
 
 interface User {
   id: string
