@@ -242,11 +242,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const getActivityIcon = (type: "pee" | "poop" | "food") => {
     switch (type) {
       case "pee":
-        return <Droplets className="h-6 w-6" />
+        return <Droplets className="h-5 w-5" />
       case "poop":
-        return <Circle className="h-6 w-6" />
+        return <Circle className="h-5 w-5" />
       case "food":
-        return <Utensils className="h-6 w-6" />
+        return <Utensils className="h-5 w-5" />
     }
   }
 
@@ -386,7 +386,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
               onClick={() => setSelectedActivity("pee")}
             >
               <Droplets className="h-6 w-6" />
-              <span className="font-medium">Pee</span>
+              <span className="text-sm">Pee</span>
             </button>
             <button
               className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
@@ -397,7 +397,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
               onClick={() => setSelectedActivity("poop")}
             >
               <Circle className="h-6 w-6" />
-              <span className="font-medium">Poop</span>
+              <span className="text-sm">Poop</span>
             </button>
             <button
               className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
@@ -408,7 +408,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
               onClick={() => setSelectedActivity("food")}
             >
               <Utensils className="h-6 w-6" />
-              <span className="font-medium">Food</span>
+              <span className="text-sm">Food</span>
             </button>
           </div>
 
@@ -498,18 +498,20 @@ export function DashboardPage({ user }: DashboardPageProps) {
               {entries
                 .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
                 .map((entry) => (
-                  <div key={entry.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
-                    <div className={`p-3 rounded-full ${getActivityColor(entry.type)}`}>
+                  <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
                       {getActivityIcon(entry.type)}
                     </div>
                     <div className="flex-1">
-                      <div className="text-gray-600">{entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}</div>
-                      <div className="text-sm text-gray-600">{entry.addedBy}</div>
-                      {entry.amount && <div className="text-sm text-blue-600 font-medium">{entry.amount}</div>}
-                      {entry.notes && <div className="text-sm text-gray-500 mt-1">{entry.notes}</div>}
+                      <div className="text-sm text-gray-600">
+                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                      </div>
+                      <div className="text-xs text-gray-600">{entry.addedBy}</div>
+                      {entry.amount && <div className="text-xs text-blue-600 font-medium">{entry.amount}</div>}
+                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
                     <div className="text-right">
-                      <div className="text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
+                      <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
                     </div>
                   </div>
                 ))}
