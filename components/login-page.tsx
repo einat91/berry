@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import Image from "next/image"
+import { auth, provider, db, isFirebaseInitialized } from "@/lib/firebaseConfig"
 
 interface User {
   id: string
@@ -30,25 +31,39 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
 
-  // Initialize Firebase when component mounts
+  // Check if Firebase is initialized
   useEffect(() => {
-    const initFirebase = async () => {
-      try {
-        const { initializeFirebase } = await import("@/lib/firebaseConfig")
-        await initializeFirebase()
+    const checkFirebase = () => {
+      if (isFirebaseInitialized()) {
         setFirebaseReady(true)
-      } catch (error) {
-        console.error("Failed to initialize Firebase:", error)
-        setError("Failed to initialize app. Please refresh the page.")
+        return true
       }
+      return false
     }
 
-    initFirebase()
-  }, [])
+    // If Firebase isn't ready yet, wait and check again
+    if (!checkFirebase()) {
+      const interval = setInterval(() => {
+        if (checkFirebase()) {
+          clearInterval(interval)
+        }
+      }, 100)
+
+      // Clear interval after 5 seconds if Firebase still isn't ready
+      setTimeout(() => {
+        clearInterval(interval)
+        if (!firebaseReady) {
+          setError("Failed to initialize app. Please refresh the page.")
+        }
+      }, 5000)
+
+      return () => clearInterval(interval)
+    }
+  }, [firebaseReady])
 
   const handleGoogleLogin = async (isJoining = false) => {
     if (!firebaseReady) {
-      setError("App is still loading. Please wait a moment.")
+      setError("App is still initializing. Please wait a moment.")
       return
     }
 
@@ -68,11 +83,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
 
     try {
-      // Get Firebase services
-      const { getFirebaseServices } = await import("@/lib/firebaseConfig")
-      const { auth, provider, db } = await getFirebaseServices()
+      // Check if Firebase is initialized
+      if (!auth || !provider || !db) {
+        throw new Error("App is still initializing. Please try again in a moment.")
+      }
 
-      // Import Firebase functions
+      // Import Firebase functions dynamically
       const { signInWithPopup } = await import("firebase/auth")
       const { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs } = await import(
         "firebase/firestore"
@@ -141,7 +157,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
     } catch (err: any) {
       console.error("Login error:", err)
-      setError("Failed to log in. Please try again.")
+      setError(err.message || "Failed to log in. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -162,6 +178,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
               <p className="text-gray-600">Initializing app...</p>
+              {error && <p className="text-red-500 mt-4">{error}</p>}
             </div>
           ) : (
             <Tabs defaultValue="signup" value={activeTab} onValueChange={setActiveTab}>
@@ -183,11 +200,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     />
                   </div>
 
-                  <Button
-                    onClick={() => handleGoogleLogin(false)}
-                    className="w-full h-12"
-                    disabled={loading || !firebaseReady}
-                  >
+                  <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
                     {loading ? "Signing up..." : "Sign up with Google"}
                   </Button>
@@ -212,11 +225,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     />
                   </div>
 
-                  <Button
-                    onClick={() => handleGoogleLogin(false)}
-                    className="w-full h-12"
-                    disabled={loading || !firebaseReady}
-                  >
+                  <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
                     {loading ? "Logging in..." : "Log in with Google"}
                   </Button>
@@ -249,11 +258,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     />
                   </div>
 
-                  <Button
-                    onClick={() => handleGoogleLogin(true)}
-                    className="w-full h-12"
-                    disabled={loading || !firebaseReady}
-                  >
+                  <Button onClick={() => handleGoogleLogin(true)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
                     {loading ? "Joining..." : "Join Family with Google"}
                   </Button>

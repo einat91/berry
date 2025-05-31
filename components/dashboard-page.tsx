@@ -5,20 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  CalendarIcon,
-  Clock,
-  DropletIcon,
-  CircleIcon,
-  UtensilsIcon,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Check,
-} from "lucide-react"
+import { CalendarIcon, Clock, ChevronLeft, ChevronRight, Copy, Check, Droplets, Circle, Utensils } from "lucide-react"
 import { format, addDays, subDays, isToday } from "date-fns"
 import Image from "next/image"
 import { useToast } from "@/hooks/use-toast"
+import { auth, db } from "@/lib/firebaseConfig"
+import { signOut } from "firebase/auth"
+import { doc, getDoc, collection, query, where, getDocs, orderBy, addDoc } from "firebase/firestore"
 
 interface User {
   id: string
@@ -34,6 +27,7 @@ interface Entry {
   timestamp: Date
   notes?: string
   addedBy: string
+  amount?: string
 }
 
 interface DashboardPageProps {
@@ -51,30 +45,17 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [selectedMember, setSelectedMember] = useState("")
   const [note, setNote] = useState("")
   const [copied, setCopied] = useState(false)
-  const [firebaseReady, setFirebaseReady] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { toast } = useToast()
+  const [amount, setAmount] = useState("")
 
-  // Initialize Firebase when component mounts
   useEffect(() => {
-    const initFirebase = async () => {
-      try {
-        const { initializeFirebase } = await import("@/lib/firebaseConfig")
-        await initializeFirebase()
-        setFirebaseReady(true)
-      } catch (error) {
-        console.error("Failed to initialize Firebase:", error)
-      }
-    }
-
-    initFirebase()
+    loadUserData()
   }, [])
 
   useEffect(() => {
-    if (firebaseReady) {
-      loadUserData()
-      loadEntries()
-    }
-  }, [selectedDate, firebaseReady])
+    loadEntries()
+  }, [selectedDate])
 
   useEffect(() => {
     if (familyMembers.length > 0 && !selectedMember) {
@@ -83,13 +64,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }, [familyMembers])
 
   const loadUserData = async () => {
-    if (!firebaseReady) return
+    if (!db) return
 
     try {
-      const { getFirebaseServices } = await import("@/lib/firebaseConfig")
-      const { db } = await getFirebaseServices()
-      const { doc, getDoc } = await import("firebase/firestore")
-
       const docRef = doc(db, "users", user.id)
       const docSnap = await getDoc(docRef)
 
@@ -99,24 +76,24 @@ export function DashboardPage({ user }: DashboardPageProps) {
         setFamilyMembers(data.familyMembers || [user.firstName])
         setFamilyCode(data.familyCode || "")
       }
+      setLoading(false)
     } catch (error) {
       console.error("Error loading user data:", error)
+      setLoading(false)
     }
   }
 
   const loadEntries = async () => {
-    if (!firebaseReady) return
+    if (!db) return
 
     try {
-      const { getFirebaseServices } = await import("@/lib/firebaseConfig")
-      const { db } = await getFirebaseServices()
-      const { collection, query, where, getDocs, orderBy } = await import("firebase/firestore")
-
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
+
+      // Query for all family members' entries for this date
       const q = query(
         entriesRef,
-        where("userId", "==", user.id),
+        where("familyCode", "==", familyCode),
         where("date", "==", dateKey),
         orderBy("timestamp", "desc"),
       )
@@ -133,7 +110,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       console.error("Error loading entries:", error)
       // Fallback to localStorage if Firebase fails
       const dateKey = format(selectedDate, "yyyy-MM-dd")
-      const stored = localStorage.getItem(`entries-${user.id}-${dateKey}`)
+      const stored = localStorage.getItem(`entries-${familyCode}-${dateKey}`)
       if (stored) {
         const parsedEntries = JSON.parse(stored).map((entry: any) => ({
           ...entry,
@@ -147,43 +124,45 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const saveEntry = async (entry: Entry) => {
-    if (!firebaseReady) return
+    if (!db) return
 
     try {
-      const { getFirebaseServices } = await import("@/lib/firebaseConfig")
-      const { db } = await getFirebaseServices()
-      const { collection, addDoc } = await import("firebase/firestore")
-
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entryData = {
         ...entry,
         userId: user.id,
+        familyCode: familyCode, // Add family code for shared access
         date: dateKey,
         timestamp: entry.timestamp,
       }
 
+      // Save to Firebase with family code for sharing
       await addDoc(collection(db, "entries"), entryData)
-    } catch (error) {
-      console.error("Error saving entry to Firebase:", error)
-      // Fallback to localStorage
-      const dateKey = format(selectedDate, "yyyy-MM-dd")
-      const stored = localStorage.getItem(`entries-${user.id}-${dateKey}`)
+
+      // Also save to localStorage as backup
+      const stored = localStorage.getItem(`entries-${familyCode}-${dateKey}`)
       const existingEntries = stored ? JSON.parse(stored) : []
       const updatedEntries = [...existingEntries, entry]
-      localStorage.setItem(`entries-${user.id}-${dateKey}`, JSON.stringify(updatedEntries))
+      localStorage.setItem(`entries-${familyCode}-${dateKey}`, JSON.stringify(updatedEntries))
+
+      console.log("Entry saved successfully to Firebase and localStorage")
+    } catch (error) {
+      console.error("Error saving entry to Firebase:", error)
+      // Fallback to localStorage only
+      const dateKey = format(selectedDate, "yyyy-MM-dd")
+      const stored = localStorage.getItem(`entries-${familyCode}-${dateKey}`)
+      const existingEntries = stored ? JSON.parse(stored) : []
+      const updatedEntries = [...existingEntries, entry]
+      localStorage.setItem(`entries-${familyCode}-${dateKey}`, JSON.stringify(updatedEntries))
+
+      toast({
+        title: "Saved locally",
+        description: "Entry saved to device. Will sync when connection is restored.",
+      })
     }
   }
 
   const handleLogActivity = async () => {
-    if (!firebaseReady) {
-      toast({
-        title: "App loading",
-        description: "Please wait for the app to finish loading",
-        variant: "destructive",
-      })
-      return
-    }
-
     if (!selectedActivity) {
       toast({
         title: "Select an activity",
@@ -202,6 +181,24 @@ export function DashboardPage({ user }: DashboardPageProps) {
       return
     }
 
+    if (selectedActivity === "food" && !amount.trim()) {
+      toast({
+        title: "Amount required",
+        description: "Please enter the amount of food",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (selectedDate > new Date()) {
+      toast({
+        title: "Cannot log future activities",
+        description: "You can only log activities for today or past dates",
+        variant: "destructive",
+      })
+      return
+    }
+
     // Parse the time and combine with the selected date
     const timeArray = selectedTime.split(":")
     const hours = Number.parseInt(timeArray[0], 10)
@@ -215,10 +212,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
       type: selectedActivity,
       timestamp,
       addedBy: selectedMember,
-      ...(note && selectedActivity === "food" && { notes: note }),
+      ...(note && { notes: note }),
+      ...(selectedActivity === "food" && amount && { amount: amount }),
     }
 
-    // Save to Firebase
+    // Save to Firebase and localStorage
     await saveEntry(newEntry)
 
     // Update local state
@@ -227,9 +225,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     // Reset form
     setSelectedActivity(null)
-    if (selectedActivity === "food") {
-      setNote("")
-    }
+    setAmount("")
+    setNote("")
 
     toast({
       title: "Activity logged",
@@ -240,22 +237,31 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const getActivityIcon = (type: "pee" | "poop" | "food") => {
     switch (type) {
       case "pee":
-        return <DropletIcon className="h-5 w-5" />
+        return <Droplets className="h-6 w-6" />
       case "poop":
-        return <CircleIcon className="h-5 w-5" />
+        return <Circle className="h-6 w-6" />
       case "food":
-        return <UtensilsIcon className="h-5 w-5" />
+        return <Utensils className="h-6 w-6" />
+    }
+  }
+
+  const getActivityColor = (type: "pee" | "poop" | "food") => {
+    switch (type) {
+      case "pee":
+        return "bg-yellow-100 text-yellow-700"
+      case "poop":
+        return "bg-amber-100 text-amber-700"
+      case "food":
+        return "bg-blue-100 text-blue-700"
     }
   }
 
   const handleSignOut = async () => {
-    if (!firebaseReady) return
+    if (!auth) return
 
     try {
-      const { getFirebaseServices } = await import("@/lib/firebaseConfig")
-      const { auth } = await getFirebaseServices()
-      const { signOut } = await import("firebase/auth")
-
+      // Ensure all pending data is saved before signing out
+      console.log("Signing out user, ensuring data is saved...")
       await signOut(auth)
     } catch (error) {
       console.error("Error signing out:", error)
@@ -284,13 +290,27 @@ export function DashboardPage({ user }: DashboardPageProps) {
     setSelectedDate(new Date())
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} className="mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white p-4 border-b border-gray-100">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} />
+            <button onClick={goToToday} className="hover:opacity-80 transition-opacity">
+              <Image src="/images/berry-logo.png" alt="Berry" width={150} height={50} />
+            </button>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -318,73 +338,89 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       <main className="max-w-md mx-auto p-4">
         {/* Date Navigation */}
-        <div className="flex items-center justify-between mb-6 bg-white rounded-lg p-4 shadow-sm">
-          <Button variant="ghost" size="icon" onClick={goToPreviousDay}>
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <div className="text-center">
-            <div className="flex items-center gap-2 text-blue-600">
-              <CalendarIcon className="h-4 w-4" />
-              <span className="font-medium">{format(selectedDate, "dd/MM/yyyy")}</span>
+        <div className="bg-white rounded-xl p-6 shadow-sm mb-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={goToPreviousDay}
+              className="h-10 w-10 rounded-full hover:bg-gray-100"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <div className="text-center">
+              <div className="flex items-center gap-3 text-blue-600">
+                <div className="p-2 bg-blue-50 rounded-full">
+                  <CalendarIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="font-semibold text-lg">{format(selectedDate, "dd/MM/yyyy")}</div>
+                </div>
+              </div>
+              {isToday(selectedDate) && (
+                <span className="inline-block mt-2 px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                  Today
+                </span>
+              )}
             </div>
-            {isToday(selectedDate) && <span className="text-xs text-gray-500">Today</span>}
-          </div>
-          <Button variant="ghost" size="icon" onClick={goToNextDay}>
-            <ChevronRight className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {!isToday(selectedDate) && (
-          <div className="text-center mb-4">
-            <Button variant="outline" size="sm" onClick={goToToday}>
-              Go to Today
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={goToNextDay}
+              disabled={isToday(selectedDate) || selectedDate > new Date()}
+              className="h-10 w-10 rounded-full hover:bg-gray-100 disabled:opacity-50"
+            >
+              <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
-        )}
+        </div>
 
         {/* Dog Info */}
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold flex items-center justify-center gap-2">
-            <span className="text-amber-700">🐶</span> {dogName}
-          </h1>
-          <p className="text-gray-600">{familyMembers.join(" & ")}</p>
+          <h1 className="text-3xl font-bold text-gray-900">{dogName}</h1>
         </div>
 
         {/* Log Activity Card */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-          <h2 className="font-bold text-lg mb-4">Log Activity</h2>
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <h2 className="font-bold text-lg mb-6 text-gray-900">Log Activity</h2>
 
           {/* Activity Type Buttons */}
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-3 gap-4 mb-6">
             <Button
-              variant={selectedActivity === "pee" ? "default" : "outline"}
-              className={`h-16 flex flex-col items-center justify-center ${
-                selectedActivity === "pee" ? "bg-blue-400 hover:bg-blue-500" : "border-gray-200"
+              variant="outline"
+              className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
+                selectedActivity === "pee"
+                  ? "border-yellow-400 bg-yellow-50 text-yellow-700"
+                  : "border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("pee")}
             >
-              <DropletIcon className="h-5 w-5 mb-1" />
-              <span>Pee</span>
+              <Droplets className="h-6 w-6" />
+              <span className="font-medium">Pee</span>
             </Button>
             <Button
-              variant={selectedActivity === "poop" ? "default" : "outline"}
-              className={`h-16 flex flex-col items-center justify-center ${
-                selectedActivity === "poop" ? "bg-amber-500 hover:bg-amber-600" : "border-gray-200"
+              variant="outline"
+              className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
+                selectedActivity === "poop"
+                  ? "border-amber-400 bg-amber-50 text-amber-700"
+                  : "border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("poop")}
             >
-              <CircleIcon className="h-5 w-5 mb-1" />
-              <span>Poop</span>
+              <Circle className="h-6 w-6" />
+              <span className="font-medium">Poop</span>
             </Button>
             <Button
-              variant={selectedActivity === "food" ? "default" : "outline"}
-              className={`h-16 flex flex-col items-center justify-center ${
-                selectedActivity === "food" ? "bg-green-500 hover:bg-green-600" : "border-gray-200"
+              variant="outline"
+              className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
+                selectedActivity === "food"
+                  ? "border-blue-400 bg-blue-50 text-blue-700"
+                  : "border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("food")}
             >
-              <UtensilsIcon className="h-5 w-5 mb-1" />
-              <span>Food</span>
+              <Utensils className="h-6 w-6" />
+              <span className="font-medium">Food</span>
             </Button>
           </div>
 
@@ -417,9 +453,25 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </div>
           </div>
 
-          {/* Note - Only for food */}
+          {/* Amount - Only for food */}
           {selectedActivity === "food" && (
             <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+                <Utensils className="h-4 w-4" />
+                <span>Amount *</span>
+              </div>
+              <Input
+                placeholder="e.g., 1 cup, 100g"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </div>
+          )}
+
+          {/* Note */}
+          {selectedActivity && (
+            <div className="mb-6">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <span>📝</span>
                 <span>Note</span>
@@ -430,16 +482,19 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
           {/* Log Button */}
           <Button
-            className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800"
+            className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-3"
             onClick={handleLogActivity}
-            disabled={!firebaseReady}
+            disabled={selectedDate > new Date()}
           >
-            {firebaseReady ? "Log Activity" : "Loading..."}
+            {selectedDate > new Date() ? "Cannot log future activities" : "Log Activity"}
           </Button>
         </div>
 
-        {/* Recent Activities */}
-        <div className="bg-white rounded-lg shadow-sm p-4">
+        {/* Today's Activities */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="font-bold text-lg mb-4 text-gray-900">
+            {isToday(selectedDate) ? "Today's Activities" : `Activities for ${format(selectedDate, "MMM d")}`}
+          </h2>
           {entries.length === 0 ? (
             <div className="text-center py-8">
               <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
@@ -450,18 +505,23 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </div>
           ) : (
             <div className="space-y-3">
-              <h2 className="font-bold text-lg mb-2">Recent Activities</h2>
               {entries
                 .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
                 .map((entry) => (
-                  <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="p-2 bg-gray-100 rounded-full">{getActivityIcon(entry.type)}</div>
+                  <div key={entry.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                    <div className={`p-3 rounded-full ${getActivityColor(entry.type)}`}>
+                      {getActivityIcon(entry.type)}
+                    </div>
                     <div className="flex-1">
-                      <div className="font-medium">{entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}</div>
-                      <div className="text-sm text-gray-600">
-                        {format(entry.timestamp, "h:mm a")} • Added by {entry.addedBy}
+                      <div className="font-semibold text-gray-900">
+                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
                       </div>
+                      <div className="text-sm text-gray-600">{entry.addedBy}</div>
+                      {entry.amount && <div className="text-sm text-blue-600 font-medium">{entry.amount}</div>}
                       {entry.notes && <div className="text-sm text-gray-500 mt-1">{entry.notes}</div>}
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium text-gray-900">{format(entry.timestamp, "h:mm a")}</div>
                     </div>
                   </div>
                 ))}
