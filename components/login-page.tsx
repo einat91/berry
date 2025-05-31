@@ -16,7 +16,6 @@ interface User {
   name: string
   email: string
   avatar: string
-  firstName: string
 }
 
 interface LoginPageProps {
@@ -26,7 +25,7 @@ interface LoginPageProps {
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<string>("signup")
   const [familyCode, setFamilyCode] = useState("")
-  const [firstName, setFirstName] = useState("")
+  const [name, setName] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
@@ -45,7 +44,20 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
 
     checkFirebase()
+    setPersistence()
   }, [])
+
+  // Set Firebase persistence to LOCAL
+  const setPersistence = async () => {
+    try {
+      const auth: any = await getAuth()
+      const { setPersistence, browserLocalPersistence } = await import("firebase/auth")
+      await setPersistence(auth, browserLocalPersistence)
+      console.log("Firebase persistence set to LOCAL")
+    } catch (error) {
+      console.error("Error setting persistence:", error)
+    }
+  }
 
   const handleGoogleLogin = async (isJoining = false) => {
     if (!firebaseReady) {
@@ -62,8 +74,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       return
     }
 
-    if (!firstName.trim()) {
-      setError("Please enter your first name")
+    if (!name.trim()) {
+      setError("Please enter your name")
       setLoading(false)
       return
     }
@@ -83,10 +95,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       const loggedInUser: User = {
         id: user.uid,
-        name: user.displayName || "Dog Parent",
+        name: name.trim(),
         email: user.email || "",
         avatar: user.photoURL || "/placeholder.svg",
-        firstName: firstName.trim(),
       }
 
       // Check if user already exists
@@ -110,14 +121,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         const familyData = familyDoc.data()
 
         await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion(firstName.trim()),
+          familyMembers: arrayUnion(name.trim()),
         })
 
         await setDoc(userDocRef, {
-          firstName: firstName.trim(),
+          name: name.trim(),
           email: user.email,
           dogName: familyData.dogName,
-          familyMembers: [...familyData.familyMembers, firstName.trim()],
+          familyMembers: [...familyData.familyMembers, name.trim()],
           familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
@@ -126,7 +137,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         onLogin(loggedInUser)
       } else {
         await setDoc(userDocRef, {
-          firstName: firstName.trim(),
+          name: name.trim(),
           email: user.email,
           createdAt: new Date(),
         })
@@ -163,10 +174,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       const loggedInUser: User = {
         id: user.uid,
-        name: firstName.trim() || "Dog Parent",
+        name: name.trim(),
         email: "",
         avatar: "/placeholder.svg",
-        firstName: firstName.trim(),
       }
 
       // Check if user already exists
@@ -190,14 +200,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         const familyData = familyDoc.data()
 
         await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion(firstName.trim()),
+          familyMembers: arrayUnion(name.trim()),
         })
 
         await setDoc(userDocRef, {
-          firstName: firstName.trim(),
+          name: name.trim(),
           email: "",
           dogName: familyData.dogName,
-          familyMembers: [...familyData.familyMembers, firstName.trim()],
+          familyMembers: [...familyData.familyMembers, name.trim()],
           familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
@@ -206,7 +216,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         onLogin(loggedInUser)
       } else {
         await setDoc(userDocRef, {
-          firstName: firstName.trim(),
+          name: name.trim(),
           email: "",
           createdAt: new Date(),
         })
@@ -247,12 +257,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               <TabsContent value="signup">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="firstName">Your First Name</Label>
+                    <Label htmlFor="name">Your Name</Label>
                     <Input
-                      id="firstName"
-                      placeholder="Enter your first name"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
+                      id="name"
+                      placeholder="Enter your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                     />
                   </div>
 
@@ -272,12 +282,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               <TabsContent value="login">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="loginFirstName">Your First Name</Label>
+                    <Label htmlFor="loginName">Your Name</Label>
                     <Input
-                      id="loginFirstName"
-                      placeholder="Enter your first name"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
+                      id="loginName"
+                      placeholder="Enter your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                     />
                   </div>
 
@@ -293,12 +303,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               <TabsContent value="join">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="joinFirstName">Your First Name</Label>
+                    <Label htmlFor="joinName">Your Name</Label>
                     <Input
-                      id="joinFirstName"
-                      placeholder="Enter your first name"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
+                      id="joinName"
+                      placeholder="Enter your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
                     />
                   </div>
 

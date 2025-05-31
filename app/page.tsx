@@ -13,7 +13,6 @@ interface User {
   name: string
   email: string
   avatar: string
-  firstName: string
 }
 
 export default function Home() {
@@ -27,8 +26,13 @@ export default function Home() {
 
     const initializeApp = async () => {
       try {
-        // Wait for Firebase to be ready
+        // Set Firebase persistence to LOCAL
         const auth: any = await getAuth()
+        const { setPersistence, browserLocalPersistence } = await import("firebase/auth")
+        await setPersistence(auth, browserLocalPersistence)
+        console.log("Firebase persistence set to LOCAL")
+
+        // Wait for Firebase to be ready
         const db: any = await getDb()
 
         if (!mounted) return
@@ -47,7 +51,6 @@ export default function Home() {
                 name: firebaseUser.displayName || "Dog Parent",
                 email: firebaseUser.email || "",
                 avatar: firebaseUser.photoURL || "/placeholder.svg",
-                firstName: firebaseUser.displayName?.split(" ")[0] || "Dog Parent",
               }
               setUser(userData)
 
@@ -107,7 +110,7 @@ export default function Home() {
 
       const userData = {
         dogName,
-        familyMembers: [user.firstName],
+        familyMembers: [user.name],
         familyCode,
         createdAt: new Date(),
         photoUrl,
