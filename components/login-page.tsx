@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import Image from "next/image"
-import { auth, provider, db, isFirebaseInitialized } from "@/lib/firebaseConfig"
+import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
 
 interface User {
   id: string
@@ -31,35 +31,21 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
 
-  // Check if Firebase is initialized
   useEffect(() => {
-    const checkFirebase = () => {
-      if (isFirebaseInitialized()) {
+    const checkFirebase = async () => {
+      try {
+        await getAuth()
+        await getProvider()
+        await getDb()
         setFirebaseReady(true)
-        return true
+      } catch (error) {
+        console.error("Error checking Firebase:", error)
+        setError("Failed to initialize app. Please refresh the page.")
       }
-      return false
     }
 
-    // If Firebase isn't ready yet, wait and check again
-    if (!checkFirebase()) {
-      const interval = setInterval(() => {
-        if (checkFirebase()) {
-          clearInterval(interval)
-        }
-      }, 100)
-
-      // Clear interval after 5 seconds if Firebase still isn't ready
-      setTimeout(() => {
-        clearInterval(interval)
-        if (!firebaseReady) {
-          setError("Failed to initialize app. Please refresh the page.")
-        }
-      }, 5000)
-
-      return () => clearInterval(interval)
-    }
-  }, [firebaseReady])
+    checkFirebase()
+  }, [])
 
   const handleGoogleLogin = async (isJoining = false) => {
     if (!firebaseReady) {
@@ -83,12 +69,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
 
     try {
-      // Check if Firebase is initialized
-      if (!auth || !provider || !db) {
-        throw new Error("App is still initializing. Please try again in a moment.")
-      }
+      const auth: any = await getAuth()
+      const provider: any = await getProvider()
+      const db: any = await getDb()
 
-      // Import Firebase functions dynamically
       const { signInWithPopup } = await import("firebase/auth")
       const { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs } = await import(
         "firebase/firestore"
@@ -110,10 +94,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const userDoc = await getDoc(userDocRef)
 
       if (userDoc.exists() && userDoc.data()?.dogName) {
-        // User exists and has completed setup, just log them in
         onLogin(loggedInUser)
       } else if (isJoining) {
-        // User is joining a family - find the family with this code
         const usersRef = collection(db, "users")
         const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
         const querySnapshot = await getDocs(q)
@@ -124,16 +106,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           return
         }
 
-        // Get the family data from the first matching user
         const familyDoc = querySnapshot.docs[0]
         const familyData = familyDoc.data()
 
-        // Add this user to the family
         await updateDoc(doc(db, "users", familyDoc.id), {
           familyMembers: arrayUnion(firstName.trim()),
         })
 
-        // Create user document with family data
         await setDoc(userDocRef, {
           firstName: firstName.trim(),
           email: user.email,
@@ -146,7 +125,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
         onLogin(loggedInUser)
       } else {
-        // New user signing up - will be directed to setup page
         await setDoc(userDocRef, {
           firstName: firstName.trim(),
           email: user.email,

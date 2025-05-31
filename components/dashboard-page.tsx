@@ -5,15 +5,25 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { CalendarIcon, Clock, ChevronLeft, ChevronRight, Copy, Check, Droplets, Circle, Utensils } from "lucide-react"
+import {
+  CalendarIcon,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Check,
+  Droplets,
+  Circle,
+  Utensils,
+  User,
+  FileText,
+} from "lucide-react"
 import { format, addDays, subDays, isToday } from "date-fns"
 import Image from "next/image"
 import { useToast } from "@/hooks/use-toast"
-import { auth, db } from "@/lib/firebaseConfig"
-import { signOut } from "firebase/auth"
-import { doc, getDoc, collection, query, where, getDocs, orderBy, addDoc } from "firebase/firestore"
+import { getAuth, getDb } from "@/lib/firebaseConfig"
 
-interface User {
+interface UserType {
   id: string
   name: string
   email: string
@@ -31,7 +41,7 @@ interface Entry {
 }
 
 interface DashboardPageProps {
-  user: User
+  user: UserType
 }
 
 export function DashboardPage({ user }: DashboardPageProps) {
@@ -64,9 +74,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }, [familyMembers])
 
   const loadUserData = async () => {
-    if (!db) return
-
     try {
+      const db: any = await getDb()
+      const { doc, getDoc } = await import("firebase/firestore")
+
       const docRef = doc(db, "users", user.id)
       const docSnap = await getDoc(docRef)
 
@@ -84,13 +95,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const loadEntries = async () => {
-    if (!db) return
-
     try {
+      const db: any = await getDb()
+      const { collection, query, where, getDocs, orderBy } = await import("firebase/firestore")
+
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
 
-      // Query for all family members' entries for this date
       const q = query(
         entriesRef,
         where("familyCode", "==", familyCode),
@@ -108,7 +119,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       setEntries(loadedEntries)
     } catch (error) {
       console.error("Error loading entries:", error)
-      // Fallback to localStorage if Firebase fails
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const stored = localStorage.getItem(`entries-${familyCode}-${dateKey}`)
       if (stored) {
@@ -124,31 +134,29 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const saveEntry = async (entry: Entry) => {
-    if (!db) return
-
     try {
+      const db: any = await getDb()
+      const { collection, addDoc } = await import("firebase/firestore")
+
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entryData = {
         ...entry,
         userId: user.id,
-        familyCode: familyCode, // Add family code for shared access
+        familyCode: familyCode,
         date: dateKey,
         timestamp: entry.timestamp,
       }
 
-      // Save to Firebase with family code for sharing
       await addDoc(collection(db, "entries"), entryData)
 
-      // Also save to localStorage as backup
       const stored = localStorage.getItem(`entries-${familyCode}-${dateKey}`)
       const existingEntries = stored ? JSON.parse(stored) : []
       const updatedEntries = [...existingEntries, entry]
       localStorage.setItem(`entries-${familyCode}-${dateKey}`, JSON.stringify(updatedEntries))
 
-      console.log("Entry saved successfully to Firebase and localStorage")
+      console.log("Entry saved successfully")
     } catch (error) {
-      console.error("Error saving entry to Firebase:", error)
-      // Fallback to localStorage only
+      console.error("Error saving entry:", error)
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const stored = localStorage.getItem(`entries-${familyCode}-${dateKey}`)
       const existingEntries = stored ? JSON.parse(stored) : []
@@ -199,7 +207,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       return
     }
 
-    // Parse the time and combine with the selected date
     const timeArray = selectedTime.split(":")
     const hours = Number.parseInt(timeArray[0], 10)
     const minutes = Number.parseInt(timeArray[1], 10)
@@ -216,14 +223,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
       ...(selectedActivity === "food" && amount && { amount: amount }),
     }
 
-    // Save to Firebase and localStorage
     await saveEntry(newEntry)
 
-    // Update local state
     const updatedEntries = [...entries, newEntry]
     setEntries(updatedEntries)
 
-    // Reset form
     setSelectedActivity(null)
     setAmount("")
     setNote("")
@@ -257,11 +261,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const handleSignOut = async () => {
-    if (!auth) return
-
     try {
-      // Ensure all pending data is saved before signing out
-      console.log("Signing out user, ensuring data is saved...")
+      const auth: any = await getAuth()
+      const { signOut } = await import("firebase/auth")
       await signOut(auth)
     } catch (error) {
       console.error("Error signing out:", error)
@@ -354,14 +356,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                   <CalendarIcon className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="font-semibold text-lg">{format(selectedDate, "dd/MM/yyyy")}</div>
+                  <div className="font-semibold text-lg text-black">{format(selectedDate, "dd/MM/yyyy")}</div>
                 </div>
               </div>
-              {isToday(selectedDate) && (
-                <span className="inline-block mt-2 px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                  Today
-                </span>
-              )}
             </div>
             <Button
               variant="ghost"
@@ -390,7 +387,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
               variant="outline"
               className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
                 selectedActivity === "pee"
-                  ? "border-yellow-400 bg-yellow-50 text-yellow-700"
+                  ? "border-yellow-500 bg-yellow-100 text-yellow-800"
                   : "border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("pee")}
@@ -402,7 +399,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
               variant="outline"
               className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
                 selectedActivity === "poop"
-                  ? "border-amber-400 bg-amber-50 text-amber-700"
+                  ? "border-amber-600 bg-amber-100 text-amber-800"
                   : "border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("poop")}
@@ -414,7 +411,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
               variant="outline"
               className={`h-20 flex flex-col items-center justify-center gap-2 border-2 ${
                 selectedActivity === "food"
-                  ? "border-blue-400 bg-blue-50 text-blue-700"
+                  ? "border-blue-500 bg-blue-100 text-blue-800"
                   : "border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("food")}
@@ -435,7 +432,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </div>
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <span>👤</span>
+                <User className="h-4 w-4" />
                 <span>Added by</span>
               </div>
               <Select value={selectedMember} onValueChange={setSelectedMember}>
@@ -473,16 +470,22 @@ export function DashboardPage({ user }: DashboardPageProps) {
           {selectedActivity && (
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <span>📝</span>
+                <FileText className="h-4 w-4" />
                 <span>Note</span>
               </div>
-              <Textarea placeholder="Quick note..." value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
+              <Textarea
+                placeholder="Quick note..."
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                className="text-sm"
+              />
             </div>
           )}
 
           {/* Log Button */}
           <Button
-            className="w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-3"
+            className="w-full bg-black hover:bg-gray-800 text-white font-medium py-3"
             onClick={handleLogActivity}
             disabled={selectedDate > new Date()}
           >
@@ -490,11 +493,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </Button>
         </div>
 
-        {/* Today's Activities */}
+        {/* Activities */}
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="font-bold text-lg mb-4 text-gray-900">
-            {isToday(selectedDate) ? "Today's Activities" : `Activities for ${format(selectedDate, "MMM d")}`}
-          </h2>
+          <h2 className="font-bold text-lg mb-4 text-gray-900">Activities</h2>
           {entries.length === 0 ? (
             <div className="text-center py-8">
               <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">

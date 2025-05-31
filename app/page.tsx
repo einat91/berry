@@ -6,7 +6,7 @@ import { LoginPage } from "../components/login-page"
 import { FamilySetupPage } from "../components/family-setup-page"
 import { DashboardPage } from "../components/dashboard-page"
 import { Toaster } from "@/components/ui/toaster"
-import { auth, db, isFirebaseInitialized } from "@/lib/firebaseConfig"
+import { getAuth, getDb } from "@/lib/firebaseConfig"
 
 interface User {
   id: string
@@ -21,122 +21,86 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [needsSetup, setNeedsSetup] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [firebaseReady, setFirebaseReady] = useState(false)
 
   useEffect(() => {
-    // Set a timeout to show an error message if loading takes too long
-    const timeoutId = setTimeout(() => {
-      if (loading) {
-        setError("Loading is taking longer than expected. You may need to refresh the page.")
-      }
-    }, 5000)
+    let mounted = true
 
-    // Only run this effect on the client
-    if (typeof window === "undefined") {
-      setLoading(false)
-      return () => clearTimeout(timeoutId)
-    }
+    const initializeApp = async () => {
+      try {
+        // Wait for Firebase to be ready
+        const auth: any = await getAuth()
+        const db: any = await getDb()
 
-    // Wait for Firebase to be ready
-    const checkFirebase = () => {
-      if (isFirebaseInitialized()) {
-        setFirebaseReady(true)
-        return true
-      }
-      return false
-    }
+        if (!mounted) return
 
-    // If Firebase isn't ready yet, wait and check again
-    if (!checkFirebase()) {
-      const interval = setInterval(() => {
-        if (checkFirebase()) {
-          clearInterval(interval)
-          initAuth()
+        // Import Firebase functions
+        const { onAuthStateChanged } = await import("firebase/auth")
+        const { doc, getDoc } = await import("firebase/firestore")
+
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: any) => {
+          try {
+            if (!mounted) return
+
+            if (firebaseUser) {
+              const userData: User = {
+                id: firebaseUser.uid,
+                name: firebaseUser.displayName || "Dog Parent",
+                email: firebaseUser.email || "",
+                avatar: firebaseUser.photoURL || "/placeholder.svg",
+                firstName: firebaseUser.displayName?.split(" ")[0] || "Dog Parent",
+              }
+              setUser(userData)
+
+              // Check if user has completed setup
+              const docRef = doc(db, "users", firebaseUser.uid)
+              const docSnap = await getDoc(docRef)
+
+              if (!docSnap.exists() || !docSnap.data()?.dogName) {
+                setNeedsSetup(true)
+              } else {
+                setNeedsSetup(false)
+              }
+            } else {
+              setUser(null)
+              setNeedsSetup(false)
+            }
+          } catch (error) {
+            console.error("Error in auth state change:", error)
+          } finally {
+            if (mounted) {
+              setLoading(false)
+            }
+          }
+        })
+
+        return () => {
+          unsubscribe()
         }
-      }, 100)
-
-      // Clear interval after 5 seconds if Firebase still isn't ready
-      setTimeout(() => {
-        clearInterval(interval)
-        if (!firebaseReady) {
+      } catch (error) {
+        console.error("Error initializing app:", error)
+        if (mounted) {
           setError("Failed to initialize app. Please refresh the page.")
           setLoading(false)
         }
-      }, 5000)
-
-      return () => {
-        clearInterval(interval)
-        clearTimeout(timeoutId)
       }
-    } else {
-      initAuth()
     }
 
-    function initAuth() {
-      // Import Firebase functions dynamically
-      import("firebase/auth").then(({ onAuthStateChanged }) => {
-        import("firebase/firestore").then(({ doc, getDoc }) => {
-          if (!auth) {
-            console.error("Firebase auth not initialized")
-            setLoading(false)
-            setError("App failed to initialize. Please refresh the page.")
-            return
-          }
-
-          const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-            try {
-              if (firebaseUser) {
-                const userData: User = {
-                  id: firebaseUser.uid,
-                  name: firebaseUser.displayName || "Dog Parent",
-                  email: firebaseUser.email || "",
-                  avatar: firebaseUser.photoURL || "/placeholder.svg",
-                  firstName: firebaseUser.displayName?.split(" ")[0] || "Dog Parent",
-                }
-                setUser(userData)
-
-                // Check if user has completed setup
-                if (db) {
-                  const docRef = doc(db, "users", firebaseUser.uid)
-                  const docSnap = await getDoc(docRef)
-
-                  if (!docSnap.exists() || !docSnap.data()?.dogName) {
-                    setNeedsSetup(true)
-                  } else {
-                    setNeedsSetup(false)
-                  }
-                }
-              } else {
-                setUser(null)
-                setNeedsSetup(false)
-              }
-            } catch (error) {
-              console.error("Error in auth state change:", error)
-            } finally {
-              setLoading(false)
-            }
-          })
-
-          return () => {
-            unsubscribe()
-          }
-        })
-      })
-    }
+    initializeApp()
 
     return () => {
-      clearTimeout(timeoutId)
+      mounted = false
     }
-  }, [firebaseReady])
+  }, [])
 
   const handleLogin = (userData: User) => {
     setUser(userData)
   }
 
   const handleSetup = async (dogName: string, photoUrl: string | null) => {
-    if (!user || !db) return
+    if (!user) return
 
     try {
+      const db: any = await getDb()
       const { doc, setDoc } = await import("firebase/firestore")
 
       const familyCode = Math.random().toString(36).substring(2, 8).toUpperCase()
