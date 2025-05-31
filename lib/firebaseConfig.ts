@@ -1,8 +1,9 @@
 "use client"
 
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, getApps, getApp } from "firebase/app"
+import { getAuth as getFirebaseAuth, GoogleAuthProvider } from "firebase/auth"
+import { getFirestore } from "firebase/firestore"
+import { getStorage as getFirebaseStorage } from "firebase/storage"
 
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
@@ -15,50 +16,37 @@ const firebaseConfig = {
   measurementId: "G-79MK22LMPH",
 }
 
+// Initialize Firebase app
+const app = typeof window !== "undefined" ? (!getApps().length ? initializeApp(firebaseConfig) : getApp()) : null
+
 // Store Firebase instances
-let firebaseApp: any = null
-let firebaseAuth: any = null
-let firebaseDb: any = null
-let firebaseStorage: any = null
-let googleProvider: any = null
+let firebaseAuth = null
+let firebaseDb = null
+let firebaseStorage = null
+let googleProvider = null
 let isInitialized = false
 
-// Initialize Firebase synchronously on client side
-if (typeof window !== "undefined") {
-  // Wait for next tick to ensure DOM is ready
-  setTimeout(async () => {
-    try {
-      const { initializeApp, getApps, getApp } = await import("firebase/app")
-      const { getAuth, GoogleAuthProvider } = await import("firebase/auth")
-      const { getFirestore } = await import("firebase/firestore")
-      const { getStorage } = await import("firebase/storage")
+// Initialize Firebase on client side
+if (typeof window !== "undefined" && app) {
+  try {
+    // Initialize services
+    firebaseAuth = getFirebaseAuth(app)
+    firebaseDb = getFirestore(app)
+    firebaseStorage = getFirebaseStorage(app)
+    googleProvider = new GoogleAuthProvider()
 
-      // Initialize or get existing Firebase app
-      if (getApps().length === 0) {
-        firebaseApp = initializeApp(firebaseConfig)
-      } else {
-        firebaseApp = getApp()
-      }
+    googleProvider.setCustomParameters({
+      prompt: "select_account",
+    })
 
-      // Initialize services
-      firebaseAuth = getAuth(firebaseApp)
-      firebaseDb = getFirestore(firebaseApp)
-      firebaseStorage = getStorage(firebaseApp)
-      googleProvider = new GoogleAuthProvider()
-
-      googleProvider.setCustomParameters({
-        prompt: "select_account",
-      })
-
-      isInitialized = true
-      console.log("Firebase initialized successfully")
-    } catch (error) {
-      console.error("Error initializing Firebase:", error)
-    }
-  }, 0)
+    isInitialized = true
+    console.log("Firebase initialized successfully")
+  } catch (error) {
+    console.error("Error initializing Firebase:", error)
+  }
 }
 
-// Simple getter functions that wait for initialization
+// Getter functions that wait for initialization
 export const getAuth = () => {
   return new Promise((resolve) => {
     const checkAuth = () => {
@@ -116,11 +104,4 @@ export const auth = firebaseAuth
 export const db = firebaseDb
 export const storage = firebaseStorage
 export const provider = googleProvider
-
-
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-export { auth, db };
+export { app }
