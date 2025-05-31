@@ -135,7 +135,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
     } catch (err: any) {
       console.error("Login error:", err)
-      setError(err.message || "Failed to log in. Please try again.")
+
+      // Handle unauthorized domain error with helpful message
+      if (err.code === "auth/unauthorized-domain") {
+        setError("This domain is not authorized. Please add this domain to Firebase authorized domains in the console.")
+      } else {
+        setError(err.message || "Failed to log in. Please try again.")
+      }
     } finally {
       setLoading(false)
     }
