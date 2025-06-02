@@ -355,7 +355,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       case "poop":
         return "bg-amber-700 text-white"
       case "food":
-        return "bg-blue-500 text-white"
+        return "bg-teal-500 text-white"
     }
   }
 
@@ -649,7 +649,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <PawPrint className="h-6 w-6 text-gray-600" />
           </div>
           <h1 className="text-xl font-bold text-gray-700">
-            Welcome, {dogName}'s Family!
+            Welcome, {dogName} family!
           </h1>
         </div>
 
@@ -684,7 +684,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <button
               className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
                 selectedActivity === "food"
-                  ? "bg-blue-500 text-white border-blue-500"
+                  ? "bg-teal-500 text-white border-teal-500"
                   : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
               onClick={() => setSelectedActivity("food")}
@@ -802,7 +802,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
                     </div>
                     <div className="text-xs text-gray-600">By {entry.addedBy}</div>
-                    {entry.amount && <div className="text-xs text-blue-600 font-medium">{entry.amount}</div>}
+                    {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
                     {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                   </div>
                   <div className="text-right">
