@@ -172,7 +172,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         description: "Could not load activities from database. Please check your connection.",
         variant: "destructive",
       })
-      setEntries([])
+      setEntries([]) // Just set empty entries on error, don't try localStorage
     } finally {
       setLoadingEntries(false)
     }
@@ -230,7 +230,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         description: "Failed to save activity to database. Please check your connection and try again.",
         variant: "destructive",
       })
-      return false
+      return false // Don't save locally on error
     } finally {
       setSaving(false)
     }
@@ -549,15 +549,21 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            <Button variant="ghost" size="icon" onClick={handleSignOut}>
-              <Image
-                src={user.avatar || "/placeholder.svg"}
-                alt={user.name}
-                width={24}
-                height={24}
-                className="rounded-full"
-              />
-            </Button>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <div className="text-sm font-medium text-gray-700">{user.name}</div>
+                <div className="text-xs text-gray-500">{user.email || "No email"}</div>
+              </div>
+              <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                <Image
+                  src={user.avatar || "/placeholder.svg"}
+                  alt={user.name}
+                  width={24}
+                  height={24}
+                  className="rounded-full"
+                />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
