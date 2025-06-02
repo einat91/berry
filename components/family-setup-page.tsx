@@ -69,7 +69,7 @@ export function FamilySetupPage({ onSetup }: FamilySetupPageProps) {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="dogName">Our dog's name is:</Label>
+              <Label htmlFor="dogName">Your dog's name is:</Label>
               <Input
                 id="dogName"
                 placeholder="Enter your dog's name"
