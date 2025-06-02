@@ -504,6 +504,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+    // UPDATE: Replace the header section in your dashboard-page.tsx (around line 400-450)
+// Find this section and replace it:
+
       {/* Header */}
       <header className="bg-white p-4 border-b border-gray-100">
         <div className="max-w-md mx-auto flex items-center justify-between">
@@ -513,16 +516,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Family Code: {familyCode}</span>
-              <button
-                onClick={copyFamilyCode}
-                className="text-gray-500 hover:text-gray-700"
-                aria-label="Copy family code"
-              >
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </button>
-            </div>
             <Dialog open={showFamilyDialog} onOpenChange={setShowFamilyDialog}>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -597,9 +590,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Invite Others</h3>
+                    <h3 className="text-sm font-medium">Family Code</h3>
                     <p className="text-sm text-gray-500">
-                      Share your family code with others so they can join your family:
+                      Share this code with others so they can join your family:
                     </p>
                     <div className="flex items-center gap-2">
                       <Input value={familyCode} readOnly className="font-mono" />
@@ -614,20 +607,15 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <div className="text-sm font-medium text-gray-700">{user.name}</div>
-              </div>
-              <Button variant="ghost" size="icon" onClick={handleSignOut}>
-                <Image
-                  src={user.avatar || "/placeholder.svg"}
-                  alt={user.name}
-                  width={24}
-                  height={24}
-                  className="rounded-full"
-                />
-              </Button>
-            </div>
+            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+              <Image
+                src={user.avatar || "/placeholder.svg"}
+                alt={user.name}
+                width={32}
+                height={32}
+                className="rounded-full"
+              />
+            </Button>
           </div>
         </div>
       </header>
