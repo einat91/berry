@@ -724,30 +724,22 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Utensils className="h-4 w-4" />
-                <span>Amount (grams) *</span>
+                <span>Grams *</span>
               </div>
-              <div className="relative">
-                <Input
-                  type="number"
-                  min="1"
-                  max="200"
-                  placeholder="Enter grams (1-200)"
-                  value={amount}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
-                    if (value >= 1 && value <= 200) {
-                      setAmount(e.target.value);
-                    } else if (e.target.value === "") {
-                      setAmount("");
-                    }
-                  }}
-                  className="pr-12"
-                  required
-                />
-                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
-                  grams
-                </span>
-              </div>
+              <Input
+                type="text"
+                placeholder="Grams"
+                value={amount}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, ''); // Only allow numbers
+                  if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 200)) {
+                    setAmount(value);
+                  }
+                }}
+                className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                style={{ MozAppearance: 'textfield' }}
+                required
+              />
               <div className="text-xs text-gray-500 mt-1">
                 Enter amount between 1-200 grams
               </div>
