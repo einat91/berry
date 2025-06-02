@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
+import { ArrowLeft } from "lucide-react"
 import Image from "next/image"
 import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
 
@@ -30,6 +31,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
+  const [showJoinForm, setShowJoinForm] = useState(false)
 
   useEffect(() => {
     const checkFirebase = async () => {
@@ -59,21 +61,38 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  const findUserInFamily = async (userEmail: string, db: any) => {
-    const { collection, query, where, getDocs } = await import("firebase/firestore")
+  const findUserInFamilyByEmail = async (userEmail: string, db: any) => {
+    const { collection, getDocs } = await import("firebase/firestore")
     
-    // Search for families where this user's email is in familyMembers
-    const usersRef = collection(db, "users")
-    const q = query(usersRef, where("familyMembers", "array-contains-any", [
-      { email: userEmail },
-      userEmail // Also check for old string format
-    ]))
-    const querySnapshot = await getDocs(q)
-
-    if (!querySnapshot.empty) {
-      return querySnapshot.docs[0]
+    try {
+      // Get all users and check their familyMembers arrays
+      const usersRef = collection(db, "users")
+      const querySnapshot = await getDocs(usersRef)
+      
+      for (const doc of querySnapshot.docs) {
+        const data = doc.data()
+        if (data.familyMembers && Array.isArray(data.familyMembers)) {
+          // Check if any family member has this email
+          const foundMember = data.familyMembers.find((member: any) => {
+            if (typeof member === 'object' && member.email) {
+              return member.email.toLowerCase() === userEmail.toLowerCase()
+            }
+            return false
+          })
+          
+          if (foundMember) {
+            console.log("Found user in family:", doc.id, data)
+            return doc
+          }
+        }
+      }
+      
+      console.log("User email not found in any family:", userEmail)
+      return null
+    } catch (error) {
+      console.error("Error searching for user in families:", error)
+      return null
     }
-    return null
   }
 
   const handleGoogleLogin = async (isJoining = false, isSignup = false) => {
@@ -125,6 +144,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         avatar: user.photoURL || "/placeholder.svg",
       }
 
+      console.log("User logged in with email:", user.email)
+
       // Check if user already exists
       const userDocRef = doc(db, "users", user.uid)
       const userDoc = await getDoc(userDocRef)
@@ -156,13 +177,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         await setDoc(userDocRef, {
           name: displayName,
           email: user.email,
-          dogName: familyData.dogName, // Use existing family's dog name
+          dogName: familyData.dogName, // Use existing family's dog name - NO NEW DOG NAME NEEDED
           familyMembers: [...(familyData.familyMembers || []), { name: displayName, email: user.email }],
           familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
         })
 
+        console.log("User successfully joined family with dog name:", familyData.dogName)
         onLogin(loggedInUser)
       } else if (isSignup) {
         // New signup - create family with dog name
@@ -181,11 +203,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         onLogin(loggedInUser)
       } else {
         // Regular login - check if user is part of an existing family by email
-        const familyDoc = await findUserInFamily(user.email, db)
+        console.log("Searching for user email in families:", user.email)
+        const familyDoc = await findUserInFamilyByEmail(user.email, db)
         
         if (familyDoc) {
           // User is part of an existing family, join them automatically
           const familyData = familyDoc.data()
+          console.log("Found user in family, joining automatically:", familyData.dogName)
           
           await setDoc(userDocRef, {
             name: displayName,
@@ -199,14 +223,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           
           onLogin(loggedInUser)
         } else {
-          // Create basic user document (will need setup)
-          await setDoc(userDocRef, {
-            name: displayName,
-            email: user.email,
-            createdAt: new Date(),
-          }, { merge: true })
-
-          onLogin(loggedInUser)
+          // No family found - show join options
+          console.log("No family found for email:", user.email)
+          setShowJoinForm(true)
+          setLoading(false)
+          return
         }
       }
     } catch (err: any) {
@@ -225,88 +246,74 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   const handleAnonymousLogin = async (isJoining = false, isSignup = false) => {
-    try {
-      const auth: any = await getAuth()
-      const db: any = await getDb()
+    // Keep existing anonymous login logic but simplified
+    setError("Please use Google login for the best experience.")
+    setLoading(false)
+  }
 
-      const { signInAnonymously } = await import("firebase/auth")
-      const { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs } = await import(
-        "firebase/firestore"
-      )
+  const handleBackToLogin = () => {
+    setShowJoinForm(false)
+    setError("")
+    setName("")
+    setFamilyCode("")
+  }
 
-      const result = await signInAnonymously(auth)
-      const user = result.user
+  // Show join form if user needs to join a family
+  if (showJoinForm) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4">
+              <Image src="/images/berry-logo.png" alt="Berry" width={200} height={60} />
+            </div>
+            <div className="flex items-center gap-2 mb-4">
+              <Button variant="ghost" size="sm" onClick={handleBackToLogin}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+            </div>
+            <CardTitle className="text-2xl font-bold">Join a Family</CardTitle>
+            <CardDescription>You need a family code to join an existing family</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="joinName">Your Name</Label>
+                <Input
+                  id="joinName"
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
 
-      const displayName = isSignup || isJoining ? name.trim() : "Dog Parent"
+              <div className="space-y-2">
+                <Label htmlFor="familyCode">Family Code</Label>
+                <Input
+                  id="familyCode"
+                  placeholder="Enter the 6-digit family code"
+                  value={familyCode}
+                  onChange={(e) => setFamilyCode(e.target.value.toUpperCase())}
+                  className="font-mono"
+                  maxLength={6}
+                />
+              </div>
 
-      const loggedInUser: User = {
-        id: user.uid,
-        name: displayName,
-        email: "",
-        avatar: "/placeholder.svg",
-      }
+              <Button onClick={() => handleGoogleLogin(true, false)} className="w-full h-12" disabled={loading}>
+                {loading ? "Joining..." : "Join Family"}
+              </Button>
 
-      const userDocRef = doc(db, "users", user.uid)
-      const userDoc = await getDoc(userDocRef)
+              {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
-      if (userDoc.exists() && userDoc.data()?.dogName && !isJoining) {
-        onLogin(loggedInUser)
-      } else if (isJoining) {
-        const usersRef = collection(db, "users")
-        const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
-        const querySnapshot = await getDocs(q)
-
-        if (querySnapshot.empty) {
-          setError("Invalid family code. Please check and try again.")
-          setLoading(false)
-          return
-        }
-
-        const familyDoc = querySnapshot.docs[0]
-        const familyData = familyDoc.data()
-
-        await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion({ name: displayName, email: "" })
-        })
-
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: "",
-          dogName: familyData.dogName, // Use existing family's dog name
-          familyMembers: [...(familyData.familyMembers || []), { name: displayName, email: "" }],
-          familyCode: familyData.familyCode,
-          photoUrl: familyData.photoUrl,
-          createdAt: new Date(),
-        })
-
-        onLogin(loggedInUser)
-      } else if (isSignup) {
-        const familyCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase()
-
-        const userData = {
-          name: displayName,
-          email: "",
-          dogName: dogName.trim(),
-          familyMembers: [{ name: displayName, email: "" }],
-          familyCode: familyCodeGenerated,
-          createdAt: new Date(),
-        }
-
-        await setDoc(userDocRef, userData)
-        onLogin(loggedInUser)
-      } else {
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: "",
-          createdAt: new Date(),
-        }, { merge: true })
-
-        onLogin(loggedInUser)
-      }
-    } catch (err: any) {
-      console.error("Anonymous login error:", err)
-      setError("Failed to create account. Please try again.")
-    }
+              <p className="text-xs text-center text-gray-600 mt-4">
+                Ask your family member for the 6-digit code (like AU5Z23)
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -328,10 +335,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             </div>
           ) : (
             <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid grid-cols-3 mb-6">
+              <TabsList className="grid grid-cols-2 mb-6">
                 <TabsTrigger value="login">Log In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>
-                <TabsTrigger value="join">Join Family</TabsTrigger>
               </TabsList>
 
               <TabsContent value="login">
@@ -344,7 +350,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
-                    Log into your existing family account
+                    Log into your existing family account or get guided to join one
                   </p>
                 </div>
               </TabsContent>
@@ -381,41 +387,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   <p className="text-xs text-center text-gray-600 mt-4">
                     You'll create a new family account for your dog
                   </p>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="join">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="joinName">Your Name</Label>
-                    <Input
-                      id="joinName"
-                      placeholder="Enter your name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="familyCode">Family Code</Label>
-                    <Input
-                      id="familyCode"
-                      placeholder="Enter the 6-digit family code"
-                      value={familyCode}
-                      onChange={(e) => setFamilyCode(e.target.value.toUpperCase())}
-                      className="font-mono"
-                      maxLength={6}
-                    />
-                  </div>
-
-                  <Button onClick={() => handleGoogleLogin(true, true)} className="w-full h-12" disabled={loading}>
-                    <GoogleIcon className="w-5 h-5 mr-3" />
-                    {loading ? "Joining..." : "Join Family with Google"}
-                  </Button>
-
-                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
-
-                  <p className="text-xs text-center text-gray-600 mt-4">Ask your family member for the 6-digit code</p>
                 </div>
               </TabsContent>
             </Tabs>
