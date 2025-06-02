@@ -34,6 +34,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 
 interface UserType {
   id: string
@@ -53,6 +54,12 @@ interface Entry {
   familyCode: string
 }
 
+interface FamilyMember {
+  name: string
+  email?: string
+  userId?: string
+}
+
 interface DashboardPageProps {
   user: UserType
 }
@@ -61,7 +68,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [entries, setEntries] = useState<Entry[]>([])
   const [dogName, setDogName] = useState("")
-  const [familyMembers, setFamilyMembers] = useState<string[]>([])
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
   const [familyCode, setFamilyCode] = useState("")
   const [selectedActivity, setSelectedActivity] = useState<"pee" | "poop" | "food" | null>(null)
   const [selectedTime, setSelectedTime] = useState(format(new Date(), "HH:mm"))
@@ -72,6 +79,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [saving, setSaving] = useState(false)
   const [loadingEntries, setLoadingEntries] = useState(false)
   const [newMemberName, setNewMemberName] = useState("")
+  const [newMemberEmail, setNewMemberEmail] = useState("")
   const [addingMember, setAddingMember] = useState(false)
   const { toast } = useToast()
   const [amount, setAmount] = useState("")
@@ -79,7 +87,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   useEffect(() => {
     loadUserData()
-    setPersistence()
   }, [])
 
   useEffect(() => {
@@ -90,35 +97,63 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   useEffect(() => {
     if (familyMembers.length > 0 && !selectedMember) {
-      setSelectedMember(familyMembers[0])
+      setSelectedMember(familyMembers[0]?.name || "")
     }
   }, [familyMembers])
-
-  // Set Firebase persistence to LOCAL
-  const setPersistence = async () => {
-    try {
-      const auth: any = await getAuth()
-      const { setPersistence, browserLocalPersistence } = await import("firebase/auth")
-      await setPersistence(auth, browserLocalPersistence)
-      console.log("Firebase persistence set to LOCAL")
-    } catch (error) {
-      console.error("Error setting persistence:", error)
-    }
-  }
 
   const loadUserData = async () => {
     try {
       const db: any = await getDb()
-      const { doc, getDoc } = await import("firebase/firestore")
+      const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
-      const docRef = doc(db, "users", user.id)
-      const docSnap = await getDoc(docRef)
+      // First try to get user's own document
+      const userDocRef = doc(db, "users", user.id)
+      const userDocSnap = await getDoc(userDocRef)
 
-      if (docSnap.exists()) {
-        const data = docSnap.data()
-        setDogName(data.dogName || "")
-        setFamilyMembers(data.familyMembers || [user.name])
-        setFamilyCode(data.familyCode || "")
+      let userData = null
+      
+      if (userDocSnap.exists()) {
+        userData = userDocSnap.data()
+      } else {
+        // If user doesn't have a document, they might be part of someone else's family
+        // Search for families where this user is a member
+        const usersRef = collection(db, "users")
+        const q = query(usersRef, where("familyMembers", "array-contains", user.name))
+        const querySnapshot = await getDocs(q)
+
+        if (!querySnapshot.empty) {
+          // Found a family that includes this user
+          const familyDoc = querySnapshot.docs[0]
+          userData = familyDoc.data()
+          
+          // Create user document with family data
+          const { setDoc } = await import("firebase/firestore")
+          await setDoc(userDocRef, {
+            name: user.name,
+            email: user.email,
+            dogName: userData.dogName,
+            familyMembers: userData.familyMembers,
+            familyCode: userData.familyCode,
+            photoUrl: userData.photoUrl,
+            createdAt: new Date(),
+          })
+        }
+      }
+
+      if (userData) {
+        setDogName(userData.dogName || "")
+        
+        // Convert familyMembers to proper format
+        const members = userData.familyMembers || [user.name]
+        const formattedMembers = members.map((member: any) => {
+          if (typeof member === 'string') {
+            return { name: member }
+          }
+          return member
+        })
+        
+        setFamilyMembers(formattedMembers)
+        setFamilyCode(userData.familyCode || "")
       } else {
         toast({
           title: "Setup Required",
@@ -149,11 +184,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
 
+      // Fixed query - removed the problematic orderBy that was causing issues
       const q = query(
         entriesRef,
         where("familyCode", "==", familyCode),
-        where("date", "==", dateKey),
-        orderBy("timestamp", "desc"),
+        where("date", "==", dateKey)
       )
 
       const querySnapshot = await getDocs(q)
@@ -162,6 +197,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
         ...doc.data(),
         timestamp: doc.data().timestamp.toDate(),
       })) as Entry[]
+
+      // Sort in memory instead of using Firebase orderBy
+      loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
       console.log(`Loaded ${loadedEntries.length} entries for ${dateKey}`)
@@ -172,7 +210,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         description: "Could not load activities from database. Please check your connection.",
         variant: "destructive",
       })
-      setEntries([]) // Just set empty entries on error, don't try localStorage
+      setEntries([])
     } finally {
       setLoadingEntries(false)
     }
@@ -209,7 +247,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const docRef = await addDoc(collection(db, "entries"), entryData)
       console.log("Entry saved successfully with ID:", docRef.id)
 
-      // Add the new entry to local state with the Firebase ID
       const newEntryWithId = {
         ...entry,
         id: docRef.id,
@@ -230,7 +267,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         description: "Failed to save activity to database. Please check your connection and try again.",
         variant: "destructive",
       })
-      return false // Don't save locally on error
+      return false
     } finally {
       setSaving(false)
     }
@@ -281,7 +318,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     timestamp.setHours(hours, minutes, 0, 0)
 
     const newEntry: Entry = {
-      id: "", // Will be set by Firebase
+      id: "",
       type: selectedActivity,
       timestamp,
       addedBy: selectedMember,
@@ -294,7 +331,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     const success = await saveEntry(newEntry)
 
     if (success) {
-      // Reset form only if save was successful
       setSelectedActivity(null)
       setAmount("")
       setNote("")
@@ -371,12 +407,18 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const { doc, updateDoc, arrayUnion } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
+      const newMember = {
+        name: newMemberName.trim(),
+        ...(newMemberEmail.trim() && { email: newMemberEmail.trim() })
+      }
+
       await updateDoc(userDocRef, {
-        familyMembers: arrayUnion(newMemberName.trim()),
+        familyMembers: arrayUnion(newMember),
       })
 
-      setFamilyMembers((prev) => [...prev, newMemberName.trim()])
+      setFamilyMembers((prev) => [...prev, newMember])
       setNewMemberName("")
+      setNewMemberEmail("")
 
       toast({
         title: "Family Member Added",
@@ -394,7 +436,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
-  const removeFamilyMember = async (memberName: string) => {
+  const removeFamilyMember = async (memberToRemove: FamilyMember) => {
     if (familyMembers.length <= 1) {
       toast({
         title: "Cannot Remove",
@@ -409,15 +451,19 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const { doc, updateDoc } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
+      const updatedMembers = familyMembers.filter((m) => 
+        m.name !== memberToRemove.name || m.email !== memberToRemove.email
+      )
+
       await updateDoc(userDocRef, {
-        familyMembers: familyMembers.filter((m) => m !== memberName),
+        familyMembers: updatedMembers,
       })
 
-      setFamilyMembers((prev) => prev.filter((m) => m !== memberName))
+      setFamilyMembers(updatedMembers)
 
       toast({
         title: "Family Member Removed",
-        description: `${memberName} has been removed from your family.`,
+        description: `${memberToRemove.name} has been removed from your family.`,
       })
     } catch (error) {
       console.error("Error removing family member:", error)
@@ -492,11 +538,16 @@ export function DashboardPage({ user }: DashboardPageProps) {
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium">Current Family Members</h3>
                     <div className="space-y-2">
-                      {familyMembers.map((member) => (
-                        <div key={member} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                      {familyMembers.map((member, index) => (
+                        <div key={`${member.name}-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-gray-500" />
-                            <span>{member}</span>
+                            <div>
+                              <span className="font-medium">{member.name}</span>
+                              {member.email && (
+                                <div className="text-xs text-gray-500">{member.email}</div>
+                              )}
+                            </div>
                           </div>
                           <Button
                             variant="ghost"
@@ -510,23 +561,37 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       ))}
                     </div>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <h3 className="text-sm font-medium">Add New Member</h3>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        placeholder="Enter name"
-                        value={newMemberName}
-                        onChange={(e) => setNewMemberName(e.target.value)}
-                      />
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor="memberName">Name *</Label>
+                        <Input
+                          id="memberName"
+                          placeholder="Enter name"
+                          value={newMemberName}
+                          onChange={(e) => setNewMemberName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="memberEmail">Email (optional)</Label>
+                        <Input
+                          id="memberEmail"
+                          type="email"
+                          placeholder="Enter email"
+                          value={newMemberEmail}
+                          onChange={(e) => setNewMemberEmail(e.target.value)}
+                        />
+                      </div>
                       <Button
                         onClick={addFamilyMember}
                         disabled={addingMember || !newMemberName.trim()}
-                        className="shrink-0"
+                        className="w-full"
                       >
                         {addingMember ? (
                           <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
                         ) : (
-                          <span>Add</span>
+                          <span>Add Member</span>
                         )}
                       </Button>
                     </div>
@@ -552,7 +617,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <div className="flex items-center gap-3">
               <div className="text-right">
                 <div className="text-sm font-medium text-gray-700">{user.name}</div>
-                <div className="text-xs text-gray-500">{user.email || "No email"}</div>
               </div>
               <Button variant="ghost" size="icon" onClick={handleSignOut}>
                 <Image
@@ -660,9 +724,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                   <SelectValue placeholder="Select member" />
                 </SelectTrigger>
                 <SelectContent>
-                  {familyMembers.map((member) => (
-                    <SelectItem key={member} value={member}>
-                      {member}
+                  {familyMembers.map((member, index) => (
+                    <SelectItem key={`${member.name}-${index}`} value={member.name}>
+                      {member.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -728,26 +792,24 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </div>
           ) : (
             <div className="space-y-3">
-              {entries
-                .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-                .map((entry) => (
-                  <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
-                      {getActivityIcon(entry.type)}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm text-gray-600">
-                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
-                      </div>
-                      <div className="text-xs text-gray-600">By {entry.addedBy}</div>
-                      {entry.amount && <div className="text-xs text-blue-600 font-medium">{entry.amount}</div>}
-                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
-                    </div>
+              {entries.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
+                    {getActivityIcon(entry.type)}
                   </div>
-                ))}
+                  <div className="flex-1">
+                    <div className="text-sm text-gray-600">
+                      {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                    </div>
+                    <div className="text-xs text-gray-600">By {entry.addedBy}</div>
+                    {entry.amount && <div className="text-xs text-blue-600 font-medium">{entry.amount}</div>}
+                    {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
