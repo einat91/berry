@@ -12,7 +12,7 @@ import {
   Copy,
   Check,
   Droplets,
-  Circle,
+  Waves,
   Utensils,
   User,
   FileText,
@@ -231,7 +231,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const db: any = await getDb()
       const { collection, addDoc, Timestamp } = await import("firebase/firestore")
 
+      console.log("🔍 Attempting to save entry:", entry)
+      console.log("📊 Current user:", user)
+      console.log("🏠 Family code:", familyCode)
+
       const dateKey = format(selectedDate, "yyyy-MM-dd")
+      
+      // Simplified entry data structure
       const entryData = {
         type: entry.type,
         timestamp: Timestamp.fromDate(entry.timestamp),
@@ -240,12 +246,23 @@ export function DashboardPage({ user }: DashboardPageProps) {
         familyCode: familyCode,
         date: dateKey,
         createdAt: Timestamp.fromDate(new Date()),
-        ...(entry.notes && { notes: entry.notes }),
-        ...(entry.amount && { amount: entry.amount }),
       }
 
-      const docRef = await addDoc(collection(db, "entries"), entryData)
-      console.log("Entry saved successfully with ID:", docRef.id)
+      // Add optional fields only if they exist
+      if (entry.notes && entry.notes.trim()) {
+        entryData.notes = entry.notes.trim()
+      }
+
+      if (entry.amount && entry.amount.trim()) {
+        entryData.amount = entry.amount.trim()
+      }
+
+      console.log("💾 Saving entry data:", entryData)
+
+      const entriesRef = collection(db, "entries")
+      const docRef = await addDoc(entriesRef, entryData)
+      
+      console.log("✅ Entry saved successfully with ID:", docRef.id)
 
       const newEntryWithId = {
         ...entry,
@@ -256,15 +273,34 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       toast({
         title: "Activity Saved",
-        description: `${entry.type.charAt(0).toUpperCase() + entry.type.slice(1)} activity saved to family account.`,
+        description: `${entry.type.charAt(0).toUpperCase() + entry.type.slice(1)} activity saved successfully!`,
       })
 
       return true
+      
     } catch (error) {
-      console.error("Error saving entry:", error)
+      console.error("❌ Error saving entry:", error)
+      console.error("Error details:", {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      })
+      
+      let errorMessage = "Failed to save activity. "
+      
+      if (error.code === 'permission-denied') {
+        errorMessage += "Database permission denied. Please check Firebase rules."
+      } else if (error.code === 'unavailable') {
+        errorMessage += "Database temporarily unavailable. Please try again."
+      } else if (error.message?.includes('offline')) {
+        errorMessage += "You're offline. Please check your internet connection."
+      } else {
+        errorMessage += "Please check your connection and try again."
+      }
+      
       toast({
         title: "Save Failed",
-        description: "Failed to save activity to database. Please check your connection and try again.",
+        description: errorMessage,
         variant: "destructive",
       })
       return false
@@ -342,7 +378,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       case "pee":
         return <Droplets className="h-5 w-5" />
       case "poop":
-        return <Circle className="h-5 w-5" />
+        return <Waves className="h-5 w-5" />
       case "food":
         return <Utensils className="h-5 w-5" />
     }
@@ -678,7 +714,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
               }`}
               onClick={() => setSelectedActivity("poop")}
             >
-              <Circle className="h-6 w-6" />
+              <Waves className="h-6 w-6" />
               <span className="text-sm">Poop</span>
             </button>
             <button
