@@ -59,6 +59,23 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
+  const findUserInFamily = async (userEmail: string, db: any) => {
+    const { collection, query, where, getDocs } = await import("firebase/firestore")
+    
+    // Search for families where this user's email is in familyMembers
+    const usersRef = collection(db, "users")
+    const q = query(usersRef, where("familyMembers", "array-contains-any", [
+      { email: userEmail },
+      userEmail // Also check for old string format
+    ]))
+    const querySnapshot = await getDocs(q)
+
+    if (!querySnapshot.empty) {
+      return querySnapshot.docs[0]
+    }
+    return null
+  }
+
   const handleGoogleLogin = async (isJoining = false, isSignup = false) => {
     if (!firebaseReady) {
       setError("App is still initializing. Please wait a moment.")
@@ -99,8 +116,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
-      // For login (not signup/join), use existing name or fallback
-      const displayName = isSignup || isJoining ? name.trim() : (user.displayName || name.trim() || "Dog Parent")
+      const displayName = isSignup || isJoining ? name.trim() : (user.displayName || "Dog Parent")
 
       const loggedInUser: User = {
         id: user.uid,
@@ -117,7 +133,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         // User exists and has completed setup - just log them in
         onLogin(loggedInUser)
       } else if (isJoining) {
-        // User is joining an existing family
+        // User is joining an existing family using family code
         const usersRef = collection(db, "users")
         const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
         const querySnapshot = await getDocs(q)
@@ -136,11 +152,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           familyMembers: arrayUnion({ name: displayName, email: user.email })
         })
 
-        // Create or update the joining user's document
+        // Create or update the joining user's document with family data
         await setDoc(userDocRef, {
           name: displayName,
           email: user.email,
-          dogName: familyData.dogName,
+          dogName: familyData.dogName, // Use existing family's dog name
           familyMembers: [...(familyData.familyMembers || []), { name: displayName, email: user.email }],
           familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
@@ -150,28 +166,48 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         onLogin(loggedInUser)
       } else if (isSignup) {
         // New signup - create family with dog name
-        const familyCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+        const familyCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase()
 
         const userData = {
           name: displayName,
           email: user.email,
           dogName: dogName.trim(),
           familyMembers: [{ name: displayName, email: user.email }],
-          familyCode,
+          familyCode: familyCodeGenerated,
           createdAt: new Date(),
         }
 
         await setDoc(userDocRef, userData)
         onLogin(loggedInUser)
       } else {
-        // Regular login - create basic user document (will need setup)
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: user.email,
-          createdAt: new Date(),
-        }, { merge: true })
+        // Regular login - check if user is part of an existing family by email
+        const familyDoc = await findUserInFamily(user.email, db)
+        
+        if (familyDoc) {
+          // User is part of an existing family, join them automatically
+          const familyData = familyDoc.data()
+          
+          await setDoc(userDocRef, {
+            name: displayName,
+            email: user.email,
+            dogName: familyData.dogName,
+            familyMembers: familyData.familyMembers,
+            familyCode: familyData.familyCode,
+            photoUrl: familyData.photoUrl,
+            createdAt: new Date(),
+          })
+          
+          onLogin(loggedInUser)
+        } else {
+          // Create basic user document (will need setup)
+          await setDoc(userDocRef, {
+            name: displayName,
+            email: user.email,
+            createdAt: new Date(),
+          }, { merge: true })
 
-        onLogin(loggedInUser)
+          onLogin(loggedInUser)
+        }
       }
     } catch (err: any) {
       console.error("Login error:", err)
@@ -210,7 +246,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         avatar: "/placeholder.svg",
       }
 
-      // Check if user already exists
       const userDocRef = doc(db, "users", user.uid)
       const userDoc = await getDoc(userDocRef)
 
@@ -237,7 +272,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         await setDoc(userDocRef, {
           name: displayName,
           email: "",
-          dogName: familyData.dogName,
+          dogName: familyData.dogName, // Use existing family's dog name
           familyMembers: [...(familyData.familyMembers || []), { name: displayName, email: "" }],
           familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
@@ -246,15 +281,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
         onLogin(loggedInUser)
       } else if (isSignup) {
-        // New signup with anonymous auth
-        const familyCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+        const familyCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase()
 
         const userData = {
           name: displayName,
           email: "",
           dogName: dogName.trim(),
           familyMembers: [{ name: displayName, email: "" }],
-          familyCode,
+          familyCode: familyCodeGenerated,
           createdAt: new Date(),
         }
 
