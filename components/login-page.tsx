@@ -23,7 +23,7 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
-  const [activeTab, setActiveTab] = useState<string>("signup")
+  const [activeTab, setActiveTab] = useState<string>("login")
   const [familyCode, setFamilyCode] = useState("")
   const [name, setName] = useState("")
   const [error, setError] = useState("")
@@ -47,7 +47,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setPersistence()
   }, [])
 
-  // Set Firebase persistence to LOCAL
   const setPersistence = async () => {
     try {
       const auth: any = await getAuth()
@@ -59,7 +58,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  const handleGoogleLogin = async (isJoining = false) => {
+  const handleGoogleLogin = async (isJoining = false, isSignup = false) => {
     if (!firebaseReady) {
       setError("App is still initializing. Please wait a moment.")
       return
@@ -74,7 +73,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       return
     }
 
-    if (!name.trim()) {
+    if ((isJoining || isSignup) && !name.trim()) {
       setError("Please enter your name")
       setLoading(false)
       return
@@ -93,9 +92,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
+      // For login (not signup/join), use existing name or fallback
+      const displayName = isSignup || isJoining ? name.trim() : (user.displayName || name.trim() || "Dog Parent")
+
       const loggedInUser: User = {
         id: user.uid,
-        name: name.trim(),
+        name: displayName,
         email: user.email || "",
         avatar: user.photoURL || "/placeholder.svg",
       }
@@ -104,9 +106,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const userDocRef = doc(db, "users", user.uid)
       const userDoc = await getDoc(userDocRef)
 
-      if (userDoc.exists() && userDoc.data()?.dogName) {
+      if (userDoc.exists() && userDoc.data()?.dogName && !isJoining) {
+        // User exists and has completed setup - just log them in
         onLogin(loggedInUser)
       } else if (isJoining) {
+        // User is joining an existing family
         const usersRef = collection(db, "users")
         const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
         const querySnapshot = await getDocs(q)
@@ -120,15 +124,17 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         const familyDoc = querySnapshot.docs[0]
         const familyData = familyDoc.data()
 
+        // Update the family creator's document to include new member
         await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion(name.trim()),
+          familyMembers: arrayUnion({ name: displayName, email: user.email })
         })
 
+        // Create or update the joining user's document
         await setDoc(userDocRef, {
-          name: name.trim(),
+          name: displayName,
           email: user.email,
           dogName: familyData.dogName,
-          familyMembers: [...familyData.familyMembers, name.trim()],
+          familyMembers: [...(familyData.familyMembers || []), { name: displayName, email: user.email }],
           familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
@@ -136,11 +142,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
         onLogin(loggedInUser)
       } else {
+        // Regular signup or login - create basic user document
         await setDoc(userDocRef, {
-          name: name.trim(),
+          name: displayName,
           email: user.email,
           createdAt: new Date(),
-        })
+        }, { merge: true })
 
         onLogin(loggedInUser)
       }
@@ -150,7 +157,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       // Handle unauthorized domain error - try anonymous login as fallback
       if (err.code === "auth/unauthorized-domain") {
         console.log("Google login failed, trying anonymous login...")
-        await handleAnonymousLogin(isJoining)
+        await handleAnonymousLogin(isJoining, isSignup)
       } else {
         setError(err.message || "Failed to log in. Please try again.")
       }
@@ -159,7 +166,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  const handleAnonymousLogin = async (isJoining = false) => {
+  const handleAnonymousLogin = async (isJoining = false, isSignup = false) => {
     try {
       const auth: any = await getAuth()
       const db: any = await getDb()
@@ -172,9 +179,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const result = await signInAnonymously(auth)
       const user = result.user
 
+      const displayName = isSignup || isJoining ? name.trim() : "Dog Parent"
+
       const loggedInUser: User = {
         id: user.uid,
-        name: name.trim(),
+        name: displayName,
         email: "",
         avatar: "/placeholder.svg",
       }
@@ -183,7 +192,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const userDocRef = doc(db, "users", user.uid)
       const userDoc = await getDoc(userDocRef)
 
-      if (userDoc.exists() && userDoc.data()?.dogName) {
+      if (userDoc.exists() && userDoc.data()?.dogName && !isJoining) {
         onLogin(loggedInUser)
       } else if (isJoining) {
         const usersRef = collection(db, "users")
@@ -200,14 +209,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         const familyData = familyDoc.data()
 
         await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion(name.trim()),
+          familyMembers: arrayUnion({ name: displayName, email: "" })
         })
 
         await setDoc(userDocRef, {
-          name: name.trim(),
+          name: displayName,
           email: "",
           dogName: familyData.dogName,
-          familyMembers: [...familyData.familyMembers, name.trim()],
+          familyMembers: [...(familyData.familyMembers || []), { name: displayName, email: "" }],
           familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
@@ -216,10 +225,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         onLogin(loggedInUser)
       } else {
         await setDoc(userDocRef, {
-          name: name.trim(),
+          name: displayName,
           email: "",
           createdAt: new Date(),
-        })
+        }, { merge: true })
 
         onLogin(loggedInUser)
       }
@@ -247,12 +256,27 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               {error && <p className="text-red-500 mt-4">{error}</p>}
             </div>
           ) : (
-            <Tabs defaultValue="signup" value={activeTab} onValueChange={setActiveTab}>
+            <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid grid-cols-3 mb-6">
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
                 <TabsTrigger value="login">Log In</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
                 <TabsTrigger value="join">Join Family</TabsTrigger>
               </TabsList>
+
+              <TabsContent value="login">
+                <div className="space-y-4">
+                  <Button onClick={() => handleGoogleLogin(false, false)} className="w-full h-12" disabled={loading}>
+                    <GoogleIcon className="w-5 h-5 mr-3" />
+                    {loading ? "Logging in..." : "Log in with Google"}
+                  </Button>
+
+                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+
+                  <p className="text-xs text-center text-gray-600 mt-4">
+                    Log into your existing family account
+                  </p>
+                </div>
+              </TabsContent>
 
               <TabsContent value="signup">
                 <div className="space-y-4">
@@ -266,7 +290,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     />
                   </div>
 
-                  <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
+                  <Button onClick={() => handleGoogleLogin(false, true)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
                     {loading ? "Signing up..." : "Sign up with Google"}
                   </Button>
@@ -276,27 +300,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   <p className="text-xs text-center text-gray-600 mt-4">
                     You'll create a new family account for your dog
                   </p>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="login">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="loginName">Your Name</Label>
-                    <Input
-                      id="loginName"
-                      placeholder="Enter your name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </div>
-
-                  <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
-                    <GoogleIcon className="w-5 h-5 mr-3" />
-                    {loading ? "Logging in..." : "Log in with Google"}
-                  </Button>
-
-                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
                 </div>
               </TabsContent>
 
@@ -324,7 +327,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     />
                   </div>
 
-                  <Button onClick={() => handleGoogleLogin(true)} className="w-full h-12" disabled={loading}>
+                  <Button onClick={() => handleGoogleLogin(true, true)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
                     {loading ? "Joining..." : "Join Family with Google"}
                   </Button>
