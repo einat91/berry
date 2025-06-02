@@ -179,7 +179,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     try {
       setLoadingEntries(true)
       const db: any = await getDb()
-      const { collection, query, where, getDocs, orderBy } = await import("firebase/firestore")
+      const { collection, query, where, getDocs } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
@@ -292,10 +292,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
       return
     }
 
-    if (selectedActivity === "food" && !amount.trim()) {
+    if (selectedActivity === "food" && (!amount.trim() || parseInt(amount) < 1 || parseInt(amount) > 200)) {
       toast({
-        title: "Amount required",
-        description: "Please enter the amount of food",
+        title: "Valid amount required",
+        description: "Please enter a valid amount between 1-200 grams",
         variant: "destructive",
       })
       return
@@ -325,7 +325,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       userId: user.id,
       familyCode: familyCode,
       ...(note && { notes: note }),
-      ...(selectedActivity === "food" && amount && { amount: amount }),
+      ...(selectedActivity === "food" && amount && { amount: `${amount}g` }),
     }
 
     const success = await saveEntry(newEntry)
@@ -739,14 +739,33 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Utensils className="h-4 w-4" />
-                <span>Amount *</span>
+                <span>Amount (grams) *</span>
               </div>
-              <Input
-                placeholder="e.g., 1 cup, 100g"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
+              <div className="relative">
+                <Input
+                  type="number"
+                  min="1"
+                  max="200"
+                  placeholder="Enter grams (1-200)"
+                  value={amount}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    if (value >= 1 && value <= 200) {
+                      setAmount(e.target.value);
+                    } else if (e.target.value === "") {
+                      setAmount("");
+                    }
+                  }}
+                  className="pr-12"
+                  required
+                />
+                <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
+                  grams
+                </span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Enter amount between 1-200 grams
+              </div>
             </div>
           )}
 
