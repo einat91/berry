@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import { LoginPage } from "../components/login-page"
-import { FamilySetupPage } from "../components/family-setup-page"
 import { DashboardPage } from "../components/dashboard-page"
 import { Toaster } from "@/components/ui/toaster"
 import { getAuth, getDb } from "@/lib/firebaseConfig"
@@ -18,7 +17,6 @@ interface User {
 export default function Home() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [needsSetup, setNeedsSetup] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -39,7 +37,6 @@ export default function Home() {
 
         // Import Firebase functions
         const { onAuthStateChanged } = await import("firebase/auth")
-        const { doc, getDoc } = await import("firebase/firestore")
 
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: any) => {
           try {
@@ -53,19 +50,8 @@ export default function Home() {
                 avatar: firebaseUser.photoURL || "/placeholder.svg",
               }
               setUser(userData)
-
-              // Check if user has completed setup
-              const docRef = doc(db, "users", firebaseUser.uid)
-              const docSnap = await getDoc(docRef)
-
-              if (!docSnap.exists() || !docSnap.data()?.dogName) {
-                setNeedsSetup(true)
-              } else {
-                setNeedsSetup(false)
-              }
             } else {
               setUser(null)
-              setNeedsSetup(false)
             }
           } catch (error) {
             console.error("Error in auth state change:", error)
@@ -99,30 +85,6 @@ export default function Home() {
     setUser(userData)
   }
 
-  const handleSetup = async (dogName: string, photoUrl: string | null) => {
-    if (!user) return
-
-    try {
-      const db: any = await getDb()
-      const { doc, setDoc } = await import("firebase/firestore")
-
-      const familyCode = Math.random().toString(36).substring(2, 8).toUpperCase()
-
-      const userData = {
-        dogName,
-        familyMembers: [user.name],
-        familyCode,
-        createdAt: new Date(),
-        photoUrl,
-      }
-
-      await setDoc(doc(db, "users", user.id), userData)
-      setNeedsSetup(false)
-    } catch (error) {
-      console.error("Error setting up family:", error)
-    }
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -138,10 +100,6 @@ export default function Home() {
 
   if (!user) {
     return <LoginPage onLogin={handleLogin} />
-  }
-
-  if (needsSetup) {
-    return <FamilySetupPage onSetup={handleSetup} />
   }
 
   return (
