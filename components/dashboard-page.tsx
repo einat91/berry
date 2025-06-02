@@ -649,7 +649,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <PawPrint className="h-6 w-6 text-gray-600" />
           </div>
           <h1 className="text-xl font-bold text-gray-700">
-            Welcome, {dogName} family!
+            Welcome, {dogName}'s Family!
           </h1>
         </div>
 
