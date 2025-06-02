@@ -504,9 +504,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-    // UPDATE: Replace the header section in your dashboard-page.tsx (around line 400-450)
-// Find this section and replace it:
-
       {/* Header */}
       <header className="bg-white p-4 border-b border-gray-100">
         <div className="max-w-md mx-auto flex items-center justify-between">
