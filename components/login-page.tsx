@@ -61,36 +61,56 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  const findUserInFamilyByEmail = async (userEmail: string, db: any) => {
+  const findUserInFamily = async (userEmail: string, db: any) => {
     const { collection, getDocs } = await import("firebase/firestore")
     
     try {
-      // Get all users and check their familyMembers arrays
+      console.log("🔍 Searching for email:", userEmail)
+      
       const usersRef = collection(db, "users")
       const querySnapshot = await getDocs(usersRef)
       
+      console.log("📂 Found", querySnapshot.docs.length, "documents")
+      
       for (const doc of querySnapshot.docs) {
         const data = doc.data()
-        if (data.familyMembers && Array.isArray(data.familyMembers)) {
-          // Check if any family member has this email
-          const foundMember = data.familyMembers.find((member: any) => {
-            if (typeof member === 'object' && member.email) {
-              return member.email.toLowerCase() === userEmail.toLowerCase()
-            }
-            return false
-          })
+        
+        // Skip if no family data
+        if (!data.familyCode || !data.familyMembers) {
+          continue
+        }
+        
+        console.log("👨‍👩‍👧‍👦 Checking family:", data.familyCode, "with", data.familyMembers.length, "members")
+        
+        // Check each family member for email match
+        for (let i = 0; i < data.familyMembers.length; i++) {
+          const member = data.familyMembers[i]
           
-          if (foundMember) {
-            console.log("Found user in family:", doc.id, data)
-            return doc
+          let memberEmail = null
+          
+          // Handle different member formats
+          if (typeof member === 'string') {
+            memberEmail = member
+          } else if (member && typeof member === 'object') {
+            memberEmail = member.email
+          }
+          
+          if (memberEmail) {
+            console.log(`📧 Comparing: "${memberEmail.toLowerCase()}" vs "${userEmail.toLowerCase()}"`)
+            
+            if (memberEmail.toLowerCase().trim() === userEmail.toLowerCase().trim()) {
+              console.log("✅ PERFECT MATCH FOUND! Returning family data")
+              return doc
+            }
           }
         }
       }
       
-      console.log("User email not found in any family:", userEmail)
+      console.log("❌ No family found for email:", userEmail)
       return null
+      
     } catch (error) {
-      console.error("Error searching for user in families:", error)
+      console.error("❌ Search error:", error)
       return null
     }
   }
@@ -135,6 +155,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
+      console.log("🔐 User signed in:", user.email)
+
       const displayName = isSignup || isJoining ? name.trim() : (user.displayName || "Dog Parent")
 
       const loggedInUser: User = {
@@ -144,17 +166,20 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         avatar: user.photoURL || "/placeholder.svg",
       }
 
-      console.log("User logged in with email:", user.email)
-
-      // Check if user already exists
+      // Check if user already exists with family data
       const userDocRef = doc(db, "users", user.uid)
       const userDoc = await getDoc(userDocRef)
 
       if (userDoc.exists() && userDoc.data()?.dogName && !isJoining) {
-        // User exists and has completed setup - just log them in
+        console.log("✅ User already has family setup, logging in")
         onLogin(loggedInUser)
-      } else if (isJoining) {
-        // User is joining an existing family using family code
+        return
+      }
+
+      if (isJoining) {
+        console.log("👥 User joining family with code:", familyCode)
+        
+        // Find family by code
         const usersRef = collection(db, "users")
         const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
         const querySnapshot = await getDocs(q)
@@ -168,26 +193,33 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         const familyDoc = querySnapshot.docs[0]
         const familyData = familyDoc.data()
 
-        // Update the family creator's document to include new member
+        console.log("📋 Found family:", familyData.dogName, familyData.familyCode)
+
+        // Add user to family members list
+        const newMember = { name: displayName, email: user.email }
         await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion({ name: displayName, email: user.email })
+          familyMembers: arrayUnion(newMember)
         })
 
-        // Create or update the joining user's document with family data
+        // Create user's own document with family data
         await setDoc(userDocRef, {
           name: displayName,
           email: user.email,
-          dogName: familyData.dogName, // Use existing family's dog name - NO NEW DOG NAME NEEDED
-          familyMembers: [...(familyData.familyMembers || []), { name: displayName, email: user.email }],
+          dogName: familyData.dogName,
+          familyMembers: [...(familyData.familyMembers || []), newMember],
           familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
         })
 
-        console.log("User successfully joined family with dog name:", familyData.dogName)
+        console.log("✅ Successfully joined family!")
         onLogin(loggedInUser)
-      } else if (isSignup) {
-        // New signup - create family with dog name
+        return
+      }
+
+      if (isSignup) {
+        console.log("🆕 Creating new family")
+        
         const familyCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase()
 
         const userData = {
@@ -200,55 +232,52 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         }
 
         await setDoc(userDocRef, userData)
+        console.log("✅ New family created with code:", familyCodeGenerated)
+        onLogin(loggedInUser)
+        return
+      }
+
+      // Regular login - search for existing family
+      console.log("🔍 Regular login - searching for existing family")
+      const familyDoc = await findUserInFamily(user.email, db)
+      
+      if (familyDoc) {
+        const familyData = familyDoc.data()
+        console.log("🎉 Found existing family! Joining automatically")
+        console.log("Family details:", {
+          dogName: familyData.dogName,
+          familyCode: familyData.familyCode,
+          members: familyData.familyMembers
+        })
+        
+        // Create user document with existing family data
+        await setDoc(userDocRef, {
+          name: displayName,
+          email: user.email,
+          dogName: familyData.dogName,
+          familyMembers: familyData.familyMembers,
+          familyCode: familyData.familyCode,
+          photoUrl: familyData.photoUrl,
+          createdAt: new Date(),
+        })
+        
         onLogin(loggedInUser)
       } else {
-        // Regular login - check if user is part of an existing family by email
-        console.log("Searching for user email in families:", user.email)
-        const familyDoc = await findUserInFamilyByEmail(user.email, db)
-        
-        if (familyDoc) {
-          // User is part of an existing family, join them automatically
-          const familyData = familyDoc.data()
-          console.log("Found user in family, joining automatically:", familyData.dogName)
-          
-          await setDoc(userDocRef, {
-            name: displayName,
-            email: user.email,
-            dogName: familyData.dogName,
-            familyMembers: familyData.familyMembers,
-            familyCode: familyData.familyCode,
-            photoUrl: familyData.photoUrl,
-            createdAt: new Date(),
-          })
-          
-          onLogin(loggedInUser)
-        } else {
-          // No family found - show join options
-          console.log("No family found for email:", user.email)
-          setShowJoinForm(true)
-          setLoading(false)
-          return
-        }
+        console.log("❓ No family found - showing join form")
+        setShowJoinForm(true)
+        setLoading(false)
       }
-    } catch (err: any) {
-      console.error("Login error:", err)
 
-      // Handle unauthorized domain error - try anonymous login as fallback
+    } catch (err: any) {
+      console.error("❌ Login error:", err)
       if (err.code === "auth/unauthorized-domain") {
-        console.log("Google login failed, trying anonymous login...")
-        await handleAnonymousLogin(isJoining, isSignup)
+        setError("Please use a different browser or enable third-party cookies.")
       } else {
         setError(err.message || "Failed to log in. Please try again.")
       }
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleAnonymousLogin = async (isJoining = false, isSignup = false) => {
-    // Keep existing anonymous login logic but simplified
-    setError("Please use Google login for the best experience.")
-    setLoading(false)
   }
 
   const handleBackToLogin = () => {
@@ -274,7 +303,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </Button>
             </div>
             <CardTitle className="text-2xl font-bold">Join a Family</CardTitle>
-            <CardDescription>You need a family code to join an existing family</CardDescription>
+            <CardDescription>Enter the family code to join an existing family</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -306,9 +335,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
               {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
-              <p className="text-xs text-center text-gray-600 mt-4">
-                Ask your family member for the 6-digit code (like AU5Z23)
-              </p>
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-xs text-blue-700 text-center">
+                  💡 Ask your family member for the 6-digit code<br/>
+                  It looks like: <strong>AU5Z23</strong>
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -350,7 +382,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
-                    Log into your existing family account or get guided to join one
+                    Will automatically find your family or guide you to join one
                   </p>
                 </div>
               </TabsContent>
@@ -385,7 +417,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
-                    You'll create a new family account for your dog
+                    Creates a new family account for your dog
                   </p>
                 </div>
               </TabsContent>
