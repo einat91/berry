@@ -26,6 +26,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<string>("login")
   const [familyCode, setFamilyCode] = useState("")
   const [name, setName] = useState("")
+  const [dogName, setDogName] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
@@ -75,6 +76,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
     if ((isJoining || isSignup) && !name.trim()) {
       setError("Please enter your name")
+      setLoading(false)
+      return
+    }
+
+    if (isSignup && !dogName.trim()) {
+      setError("Please enter your dog's name")
       setLoading(false)
       return
     }
@@ -141,8 +148,23 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         })
 
         onLogin(loggedInUser)
+      } else if (isSignup) {
+        // New signup - create family with dog name
+        const familyCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+
+        const userData = {
+          name: displayName,
+          email: user.email,
+          dogName: dogName.trim(),
+          familyMembers: [{ name: displayName, email: user.email }],
+          familyCode,
+          createdAt: new Date(),
+        }
+
+        await setDoc(userDocRef, userData)
+        onLogin(loggedInUser)
       } else {
-        // Regular signup or login - create basic user document
+        // Regular login - create basic user document (will need setup)
         await setDoc(userDocRef, {
           name: displayName,
           email: user.email,
@@ -223,6 +245,21 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         })
 
         onLogin(loggedInUser)
+      } else if (isSignup) {
+        // New signup with anonymous auth
+        const familyCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+
+        const userData = {
+          name: displayName,
+          email: "",
+          dogName: dogName.trim(),
+          familyMembers: [{ name: displayName, email: "" }],
+          familyCode,
+          createdAt: new Date(),
+        }
+
+        await setDoc(userDocRef, userData)
+        onLogin(loggedInUser)
       } else {
         await setDoc(userDocRef, {
           name: displayName,
@@ -287,6 +324,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       placeholder="Enter your name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="dogName">Your Dog's Name</Label>
+                    <Input
+                      id="dogName"
+                      placeholder="Enter your dog's name"
+                      value={dogName}
+                      onChange={(e) => setDogName(e.target.value)}
                     />
                   </div>
 
