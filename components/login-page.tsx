@@ -103,7 +103,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const usersRef = collection(db, "users")
       const querySnapshot = await getDocs(usersRef)
       
-      console.log("📂 Found", querySnapshot.docs.length, "user documents to search")
+      console.log("📂 Found", querySnapshot.docs.length, "user documents")
       
       for (const doc of querySnapshot.docs) {
         const data = doc.data()
@@ -112,26 +112,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           continue
         }
         
-        console.log(`👨‍👩‍👧‍👦 Checking family "${data.dogName}" with ${data.familyMembers.length} members`)
+        console.log(`👨‍👩‍👧‍👦 Checking family "${data.dogName}"`)
         
         // Check each family member
         for (const member of data.familyMembers) {
-          let memberEmail = null
-          
-          // Handle both string format (legacy) and object format
-          if (typeof member === 'string') {
-            // Legacy format might have email as string
-            if (member.includes('@')) {
-              memberEmail = member
-            }
-          } else if (member && typeof member === 'object' && member.email) {
-            memberEmail = member.email
-          }
-          
-          if (memberEmail) {
-            console.log(`📧 Comparing: "${memberEmail.toLowerCase().trim()}" vs "${userEmail.toLowerCase().trim()}"`)
+          if (typeof member === 'object' && member.email) {
+            console.log(`📧 Comparing: "${member.email.toLowerCase().trim()}" vs "${userEmail.toLowerCase().trim()}"`)
             
-            if (memberEmail.toLowerCase().trim() === userEmail.toLowerCase().trim()) {
+            if (member.email.toLowerCase().trim() === userEmail.toLowerCase().trim()) {
               console.log("✅ MATCH FOUND! User is part of", data.dogName, "'s family")
               return {
                 id: doc.id,
@@ -175,7 +163,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const db: any = await getDb()
 
       const { signInWithPopup } = await import("firebase/auth")
-      const { doc, getDoc, setDoc, updateDoc, arrayUnion } = await import("firebase/firestore")
+      const { doc, getDoc, setDoc, updateDoc } = await import("firebase/firestore")
 
       const result = await signInWithPopup(auth, provider)
       const user = result.user
@@ -220,17 +208,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
 
       // Regular login - search for existing family by email
-      console.log("🔍 Regular login - searching for existing family by email")
+      console.log("🔍 Regular login - searching for existing family")
       const familyDoc = await findUserInFamily(user.email, db)
       
       if (familyDoc) {
         const familyData = familyDoc.data()
-        console.log("🎉 Found existing family! Joining automatically")
-        console.log("Family details:", {
-          dogName: familyData.dogName,
-          familyId: familyDoc.id,
-          members: familyData.familyMembers.length
-        })
+        console.log("🎉 Found existing family!")
         
         // Create user document that references the family
         await setDoc(userDocRef, {
@@ -238,29 +221,22 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           email: user.email,
           dogName: familyData.dogName,
           familyMembers: familyData.familyMembers,
-          familyDocId: familyDoc.id, // Reference to the original family doc
-          photoUrl: user.photoURL || "/placeholder.svg",
+          familyDocId: familyDoc.id,
           createdAt: new Date(),
         })
         
-        // Update the family member entry to include the user's actual name if needed
-        const familyDocRef = doc(db, "users", familyDoc.id)
+        // Update the member's name in the family document
         const updatedMembers = familyData.familyMembers.map((member: any) => {
           if (typeof member === 'object' && member.email === user.email) {
-            // Update the member entry with the actual name from Google
             return { ...member, name: displayName }
           }
           return member
         })
         
-        // Only update if there were changes
-        const hasChanges = JSON.stringify(updatedMembers) !== JSON.stringify(familyData.familyMembers)
-        if (hasChanges) {
-          await updateDoc(familyDocRef, {
-            familyMembers: updatedMembers
-          })
-          console.log("📝 Updated family member name in original family doc")
-        }
+        const familyDocRef = doc(db, "users", familyDoc.id)
+        await updateDoc(familyDocRef, {
+          familyMembers: updatedMembers
+        })
         
         toast({
           title: "Welcome to the Family!",
@@ -270,7 +246,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         onLogin(loggedInUser)
       } else {
         // No family found
-        console.log("❓ No family found - user needs to sign up or be invited")
+        console.log("❓ No family found")
         toast({
           title: "No Family Found",
           description: "No family found for your email. Please sign up to create a new family or ask a family member to add your email first.",
