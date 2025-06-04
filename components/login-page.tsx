@@ -1,557 +1,1038 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Label } from "@/components/ui/label"
-import { ArrowLeft, AlertCircle } from "lucide-react"
-import Image from "next/image"
-import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Alert,
-  AlertDescription,
-} from "@/components/ui/alert"
+  CalendarIcon,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Check,
+  Droplets,
+  Waves,
+  Utensils,
+  User,
+  FileText,
+  PawPrint,
+  UserPlus,
+  X,
+  AlertCircle,
+  Trash2,
+  RefreshCw,
+} from "lucide-react"
+import { format, addDays, subDays, isToday } from "date-fns"
+import Image from "next/image"
+import { useToast } from "@/hooks/use-toast"
+import { getAuth, getDb } from "@/lib/firebaseConfig"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { Label } from "@/components/ui/label"
 
-interface User {
+interface UserType {
   id: string
   name: string
   email: string
   avatar: string
 }
 
-interface LoginPageProps {
-  onLogin: (user: User) => void
+interface Entry {
+  id: string
+  type: "pee" | "poop" | "food"
+  timestamp: Date
+  notes?: string
+  addedBy: string
+  amount?: string
+  userId: string
+  familyCode: string
 }
 
-export function LoginPage({ onLogin }: LoginPageProps) {
-  const [activeTab, setActiveTab] = useState<string>("login")
-  const [familyCode, setFamilyCode] = useState("")
-  const [name, setName] = useState("")
+interface FamilyMember {
+  name: string
+  email?: string
+  userId?: string
+}
+
+interface DashboardPageProps {
+  user: UserType
+}
+
+export function DashboardPage({ user }: DashboardPageProps) {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [entries, setEntries] = useState<Entry[]>([])
   const [dogName, setDogName] = useState("")
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [firebaseReady, setFirebaseReady] = useState(false)
-  const [showJoinForm, setShowJoinForm] = useState(false)
-  const [nameError, setNameError] = useState("")
-  const [dogNameError, setDogNameError] = useState("")
-  const [familyCodeError, setFamilyCodeError] = useState("")
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
+  const [familyCode, setFamilyCode] = useState("")
+  const [selectedActivity, setSelectedActivity] = useState<"pee" | "poop" | "food" | null>(null)
+  const [selectedTime, setSelectedTime] = useState(format(new Date(), "HH:mm"))
+  const [selectedMember, setSelectedMember] = useState("")
+  const [note, setNote] = useState("")
+  const [copied, setCopied] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [loadingEntries, setLoadingEntries] = useState(false)
+  const [newMemberName, setNewMemberName] = useState("")
+  const [newMemberEmail, setNewMemberEmail] = useState("")
+  const [addingMember, setAddingMember] = useState(false)
+  const [deletingEntry, setDeletingEntry] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [swipedEntry, setSwipedEntry] = useState<string | null>(null)
+  const [startX, setStartX] = useState<number>(0)
+  const [currentX, setCurrentX] = useState<number>(0)
+  const [isDragging, setIsDragging] = useState<boolean>(false)
+  const { toast } = useToast()
+  const [amount, setAmount] = useState("")
+  const [showFamilyDialog, setShowFamilyDialog] = useState(false)
 
   useEffect(() => {
-    const checkFirebase = async () => {
-      try {
-        await getAuth()
-        await getProvider()
-        await getDb()
-        setFirebaseReady(true)
-      } catch (error) {
-        console.error("Error checking Firebase:", error)
-        setError("Failed to initialize app. Please refresh the page.")
-      }
-    }
-
-    checkFirebase()
-    setPersistence()
+    loadUserData()
   }, [])
 
-  const setPersistence = async () => {
+  useEffect(() => {
+    if (familyCode) {
+      loadEntries()
+    }
+  }, [selectedDate, familyCode])
+
+  useEffect(() => {
+    if (familyMembers.length > 0 && !selectedMember) {
+      setSelectedMember(familyMembers[0]?.name || "")
+    }
+  }, [familyMembers])
+
+  const loadUserData = async () => {
     try {
-      const auth: any = await getAuth()
-      const { setPersistence, browserLocalPersistence } = await import("firebase/auth")
-      await setPersistence(auth, browserLocalPersistence)
-      console.log("Firebase persistence set to LOCAL")
-    } catch (error) {
-      console.error("Error setting persistence:", error)
-    }
-  }
-
-  const clearValidationErrors = () => {
-    setNameError("")
-    setDogNameError("")
-    setFamilyCodeError("")
-    setError("")
-  }
-
-  const validateSignupForm = () => {
-    let hasErrors = false
-    clearValidationErrors()
-
-    if (!name.trim()) {
-      setNameError("Name is required")
-      hasErrors = true
-    }
-
-    if (!dogName.trim()) {
-      setDogNameError("Dog's name is required")
-      hasErrors = true
-    }
-
-    return !hasErrors
-  }
-
-  const validateJoinForm = () => {
-    let hasErrors = false
-    clearValidationErrors()
-
-    if (!name.trim()) {
-      setNameError("Name is required")
-      hasErrors = true
-    }
-
-    if (!familyCode.trim()) {
-      setFamilyCodeError("Family code is required")
-      hasErrors = true
-    }
-
-    return !hasErrors
-  }
-
-  const findUserInFamily = async (userEmail: string, db: any) => {
-    const { collection, getDocs } = await import("firebase/firestore")
-    
-    try {
-      console.log("🔍 Searching for email:", userEmail)
-      
-      const usersRef = collection(db, "users")
-      const querySnapshot = await getDocs(usersRef)
-      
-      console.log("📂 Found", querySnapshot.docs.length, "documents")
-      
-      for (const doc of querySnapshot.docs) {
-        const data = doc.data()
-        
-        // Skip if no family data
-        if (!data.familyCode || !data.familyMembers) {
-          continue
-        }
-        
-        console.log("👨‍👩‍👧‍👦 Checking family:", data.familyCode, "with", data.familyMembers.length, "members")
-        
-        // Check each family member for email match
-        for (let i = 0; i < data.familyMembers.length; i++) {
-          const member = data.familyMembers[i]
-          
-          let memberEmail = null
-          
-          // Handle different member formats
-          if (typeof member === 'string') {
-            memberEmail = member
-          } else if (member && typeof member === 'object') {
-            memberEmail = member.email
-          }
-          
-          if (memberEmail) {
-            console.log(`📧 Comparing: "${memberEmail.toLowerCase()}" vs "${userEmail.toLowerCase()}"`)
-            
-            if (memberEmail.toLowerCase().trim() === userEmail.toLowerCase().trim()) {
-              console.log("✅ PERFECT MATCH FOUND! Returning family data")
-              return doc
-            }
-          }
-        }
-      }
-      
-      console.log("❌ No family found for email:", userEmail)
-      return null
-      
-    } catch (error) {
-      console.error("❌ Search error:", error)
-      return null
-    }
-  }
-
-  const handleGoogleLogin = async (isJoining = false, isSignup = false) => {
-    if (!firebaseReady) {
-      setError("App is still initializing. Please wait a moment.")
-      return
-    }
-
-    // Clear previous errors
-    clearValidationErrors()
-
-    // Validate forms based on action
-    if (isSignup && !validateSignupForm()) {
-      return
-    }
-
-    if (isJoining && !validateJoinForm()) {
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const auth: any = await getAuth()
-      const provider: any = await getProvider()
       const db: any = await getDb()
+      const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
-      const { signInWithPopup } = await import("firebase/auth")
-      const { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs } = await import(
-        "firebase/firestore"
-      )
+      // First try to get user's own document
+      const userDocRef = doc(db, "users", user.id)
+      const userDocSnap = await getDoc(userDocRef)
 
-      const result = await signInWithPopup(auth, provider)
-      const user = result.user
-
-      console.log("🔐 User signed in:", user.email)
-
-      const displayName = isSignup || isJoining ? name.trim() : (user.displayName || "Dog Parent")
-
-      const loggedInUser: User = {
-        id: user.uid,
-        name: displayName,
-        email: user.email || "",
-        avatar: user.photoURL || "/placeholder.svg",
-      }
-
-      // Check if user already exists with family data
-      const userDocRef = doc(db, "users", user.uid)
-      const userDoc = await getDoc(userDocRef)
-
-      if (userDoc.exists() && userDoc.data()?.dogName && !isJoining) {
-        console.log("✅ User already has family setup, logging in")
-        onLogin(loggedInUser)
-        return
-      }
-
-      if (isJoining) {
-        console.log("👥 User joining family with code:", familyCode)
-        
-        // Find family by code
+      let userData = null
+      
+      if (userDocSnap.exists()) {
+        userData = userDocSnap.data()
+      } else {
+        // If user doesn't have a document, they might be part of someone else's family
+        // Search for families where this user is a member
         const usersRef = collection(db, "users")
-        const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
+        const q = query(usersRef, where("familyMembers", "array-contains", user.name))
         const querySnapshot = await getDocs(q)
 
-        if (querySnapshot.empty) {
-          setFamilyCodeError("Invalid family code. Please check and try again.")
-          setLoading(false)
-          return
+        if (!querySnapshot.empty) {
+          // Found a family that includes this user
+          const familyDoc = querySnapshot.docs[0]
+          userData = familyDoc.data()
+          
+          // Create user document with family data
+          const { setDoc } = await import("firebase/firestore")
+          await setDoc(userDocRef, {
+            name: user.name,
+            email: user.email,
+            dogName: userData.dogName,
+            familyMembers: userData.familyMembers,
+            familyCode: userData.familyCode,
+            photoUrl: userData.photoUrl,
+            createdAt: new Date(),
+          })
         }
-
-        const familyDoc = querySnapshot.docs[0]
-        const familyData = familyDoc.data()
-
-        console.log("📋 Found family:", familyData.dogName, familyData.familyCode)
-
-        // Add user to family members list
-        const newMember = { name: displayName, email: user.email }
-        await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion(newMember)
-        })
-
-        // Create user's own document with family data
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: user.email,
-          dogName: familyData.dogName,
-          familyMembers: [...(familyData.familyMembers || []), newMember],
-          familyCode: familyData.familyCode,
-          photoUrl: familyData.photoUrl,
-          createdAt: new Date(),
-        })
-
-        console.log("✅ Successfully joined family!")
-        onLogin(loggedInUser)
-        return
       }
 
-      if (isSignup) {
-        console.log("🆕 Creating new family")
+      if (userData) {
+        setDogName(userData.dogName || "")
         
-        const familyCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase()
-
-        const userData = {
-          name: displayName,
-          email: user.email,
-          dogName: dogName.trim(),
-          familyMembers: [{ name: displayName, email: user.email }],
-          familyCode: familyCodeGenerated,
-          createdAt: new Date(),
-        }
-
-        await setDoc(userDocRef, userData)
-        console.log("✅ New family created with code:", familyCodeGenerated)
-        onLogin(loggedInUser)
-        return
-      }
-
-      // Regular login - search for existing family
-      console.log("🔍 Regular login - searching for existing family")
-      const familyDoc = await findUserInFamily(user.email, db)
-      
-      if (familyDoc) {
-        const familyData = familyDoc.data()
-        console.log("🎉 Found existing family! Joining automatically")
-        console.log("Family details:", {
-          dogName: familyData.dogName,
-          familyCode: familyData.familyCode,
-          members: familyData.familyMembers
+        // Convert familyMembers to proper format
+        const members = userData.familyMembers || [user.name]
+        const formattedMembers = members.map((member: any) => {
+          if (typeof member === 'string') {
+            return { name: member }
+          }
+          return member
         })
         
-        // Create user document with existing family data
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: user.email,
-          dogName: familyData.dogName,
-          familyMembers: familyData.familyMembers,
-          familyCode: familyData.familyCode,
-          photoUrl: familyData.photoUrl,
-          createdAt: new Date(),
-        })
-        
-        onLogin(loggedInUser)
+        setFamilyMembers(formattedMembers)
+        setFamilyCode(userData.familyCode || "")
       } else {
-        console.log("❓ No family found - showing join form")
-        setShowJoinForm(true)
-        setLoading(false)
+        toast({
+          title: "Setup Required",
+          description: "Please complete your family setup first.",
+          variant: "destructive",
+        })
       }
-
-    } catch (err: any) {
-      console.error("❌ Login error:", err)
-      if (err.code === "auth/unauthorized-domain") {
-        setError("Please use a different browser or enable third-party cookies.")
-      } else {
-        setError(err.message || "Failed to log in. Please try again.")
-      }
-    } finally {
+      setLoading(false)
+    } catch (error) {
+      console.error("Error loading user data:", error)
+      toast({
+        title: "Database Error",
+        description: "Failed to load your family data. Please check your connection and try again.",
+        variant: "destructive",
+      })
       setLoading(false)
     }
   }
 
-  const handleBackToLogin = () => {
-    setShowJoinForm(false)
-    clearValidationErrors()
-    setName("")
-    setFamilyCode("")
+  const loadEntries = async () => {
+    if (!familyCode) return
+
+    try {
+      setLoadingEntries(true)
+      const db: any = await getDb()
+      const { collection, query, where, getDocs } = await import("firebase/firestore")
+
+      const dateKey = format(selectedDate, "yyyy-MM-dd")
+      const entriesRef = collection(db, "entries")
+
+      // Fixed query - removed the problematic orderBy that was causing issues
+      const q = query(
+        entriesRef,
+        where("familyCode", "==", familyCode),
+        where("date", "==", dateKey)
+      )
+
+      const querySnapshot = await getDocs(q)
+      const loadedEntries = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp.toDate(),
+      })) as Entry[]
+
+      // Sort in memory instead of using Firebase orderBy
+      loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+
+      setEntries(loadedEntries)
+      console.log(`Loaded ${loadedEntries.length} entries for ${dateKey}`)
+    } catch (error) {
+      console.error("Error loading entries:", error)
+      toast({
+        title: "Failed to Load Activities",
+        description: "Could not load activities from database. Please check your connection.",
+        variant: "destructive",
+      })
+      setEntries([])
+    } finally {
+      setLoadingEntries(false)
+    }
   }
 
-  // Show join form if user needs to join a family
-  if (showJoinForm) {
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await loadEntries()
+      // Reset the selected time to current time
+      setSelectedTime(format(new Date(), "HH:mm"))
+      toast({
+        title: "Refreshed",
+        description: "Activities have been refreshed successfully!",
+      })
+    } catch (error) {
+      toast({
+        title: "Refresh Failed",
+        description: "Could not refresh activities. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const deleteEntry = async (entryId: string) => {
+    try {
+      setDeletingEntry(entryId)
+      const db: any = await getDb()
+      const { doc, deleteDoc } = await import("firebase/firestore")
+
+      const entryRef = doc(db, "entries", entryId)
+      await deleteDoc(entryRef)
+
+      // Remove from local state
+      setEntries((prevEntries) => prevEntries.filter((entry) => entry.id !== entryId))
+      
+      // Reset swipe state
+      setSwipedEntry(null)
+
+      toast({
+        title: "Activity Deleted",
+        description: "The activity has been deleted successfully.",
+      })
+    } catch (error) {
+      console.error("Error deleting entry:", error)
+      toast({
+        title: "Delete Failed",
+        description: "Could not delete the activity. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingEntry(null)
+    }
+  }
+
+  const handleTouchStart = (e: React.TouchEvent, entryId: string) => {
+    setStartX(e.touches[0].clientX)
+    setCurrentX(e.touches[0].clientX)
+    setIsDragging(true)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent, entryId: string) => {
+    if (!isDragging) return
+    
+    const touch = e.touches[0]
+    setCurrentX(touch.clientX)
+    
+    const deltaX = startX - touch.clientX
+    
+    // Only allow left swipe (positive deltaX)
+    if (deltaX > 20) {
+      setSwipedEntry(entryId)
+    } else if (deltaX < -10) {
+      setSwipedEntry(null)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setIsDragging(false)
+    const deltaX = startX - currentX
+    
+    // If swipe distance is less than threshold, close the swipe
+    if (deltaX < 60) {
+      setSwipedEntry(null)
+    }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent, entryId: string) => {
+    setStartX(e.clientX)
+    setCurrentX(e.clientX)
+    setIsDragging(true)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent, entryId: string) => {
+    if (!isDragging) return
+    
+    setCurrentX(e.clientX)
+    
+    const deltaX = startX - e.clientX
+    
+    // Only allow left swipe (positive deltaX)
+    if (deltaX > 20) {
+      setSwipedEntry(entryId)
+    } else if (deltaX < -10) {
+      setSwipedEntry(null)
+    }
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+    const deltaX = startX - currentX
+    
+    // If swipe distance is less than threshold, close the swipe
+    if (deltaX < 60) {
+      setSwipedEntry(null)
+    }
+  }
+
+  const saveEntry = async (entry: Entry) => {
+    if (!familyCode) {
+      toast({
+        title: "Family Setup Required",
+        description: "Please complete your family setup before logging activities.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    try {
+      setSaving(true)
+      const db: any = await getDb()
+      const { collection, addDoc, Timestamp } = await import("firebase/firestore")
+
+      console.log("🔍 Attempting to save entry:", entry)
+      console.log("📊 Current user:", user)
+      console.log("🏠 Family code:", familyCode)
+
+      const dateKey = format(selectedDate, "yyyy-MM-dd")
+      
+      // Simplified entry data structure
+      const entryData = {
+        type: entry.type,
+        timestamp: Timestamp.fromDate(entry.timestamp),
+        addedBy: entry.addedBy,
+        userId: user.id,
+        familyCode: familyCode,
+        date: dateKey,
+        createdAt: Timestamp.fromDate(new Date()),
+      }
+
+      // Add optional fields only if they exist
+      if (entry.notes && entry.notes.trim()) {
+        entryData.notes = entry.notes.trim()
+      }
+
+      if (entry.amount && entry.amount.trim()) {
+        entryData.amount = entry.amount.trim()
+      }
+
+      console.log("💾 Saving entry data:", entryData)
+
+      const entriesRef = collection(db, "entries")
+      const docRef = await addDoc(entriesRef, entryData)
+      
+      console.log("✅ Entry saved successfully with ID:", docRef.id)
+
+      const newEntryWithId = {
+        ...entry,
+        id: docRef.id,
+      }
+
+      setEntries((prevEntries) => [newEntryWithId, ...prevEntries])
+
+      toast({
+        title: "Activity Saved",
+        description: `${entry.type.charAt(0).toUpperCase() + entry.type.slice(1)} activity saved successfully!`,
+      })
+
+      return true
+      
+    } catch (error) {
+      console.error("❌ Error saving entry:", error)
+      console.error("Error details:", {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      })
+      
+      let errorMessage = "Failed to save activity. "
+      
+      if (error.code === 'permission-denied') {
+        errorMessage += "Database permission denied. Please check Firebase rules."
+      } else if (error.code === 'unavailable') {
+        errorMessage += "Database temporarily unavailable. Please try again."
+      } else if (error.message?.includes('offline')) {
+        errorMessage += "You're offline. Please check your internet connection."
+      } else {
+        errorMessage += "Please check your connection and try again."
+      }
+      
+      toast({
+        title: "Save Failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleLogActivity = async () => {
+    if (!selectedActivity) {
+      toast({
+        title: "Select an activity",
+        description: "Please select an activity type (pee, poop, or food)",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!selectedMember) {
+      toast({
+        title: "Select a family member",
+        description: "Please select who is logging this activity",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (selectedActivity === "food" && (!amount.trim() || parseInt(amount) < 1 || parseInt(amount) > 200)) {
+      toast({
+        title: "Valid amount required",
+        description: "Please enter a valid amount between 1-200 grams",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (selectedDate > new Date()) {
+      toast({
+        title: "Cannot log future activities",
+        description: "You can only log activities for today or past dates",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const timeArray = selectedTime.split(":")
+    const hours = Number.parseInt(timeArray[0], 10)
+    const minutes = Number.parseInt(timeArray[1], 10)
+
+    const timestamp = new Date(selectedDate)
+    timestamp.setHours(hours, minutes, 0, 0)
+
+    const newEntry: Entry = {
+      id: "",
+      type: selectedActivity,
+      timestamp,
+      addedBy: selectedMember,
+      userId: user.id,
+      familyCode: familyCode,
+      ...(note && { notes: note }),
+      ...(selectedActivity === "food" && amount && { amount: `${amount}g` }),
+    }
+
+    const success = await saveEntry(newEntry)
+
+    if (success) {
+      setSelectedActivity(null)
+      setAmount("")
+      setNote("")
+    }
+  }
+
+  const getActivityIcon = (type: "pee" | "poop" | "food") => {
+    switch (type) {
+      case "pee":
+        return <Droplets className="h-5 w-5" />
+      case "poop":
+        return <Waves className="h-5 w-5" />
+      case "food":
+        return <Utensils className="h-5 w-5" />
+    }
+  }
+
+  const getActivityColor = (type: "pee" | "poop" | "food") => {
+    switch (type) {
+      case "pee":
+        return "bg-yellow-500 text-white"
+      case "poop":
+        return "bg-amber-700 text-white"
+      case "food":
+        return "bg-teal-500 text-white"
+    }
+  }
+
+  const handleSignOut = async () => {
+    try {
+      const auth: any = await getAuth()
+      const { signOut } = await import("firebase/auth")
+      await signOut(auth)
+    } catch (error) {
+      console.error("Error signing out:", error)
+    }
+  }
+
+  const copyFamilyCode = () => {
+    navigator.clipboard.writeText(familyCode)
+    setCopied(true)
+    toast({
+      title: "Copied!",
+      description: "Family code copied to clipboard",
+    })
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const goToPreviousDay = () => {
+    setSelectedDate(subDays(selectedDate, 1))
+  }
+
+  const goToNextDay = () => {
+    setSelectedDate(addDays(selectedDate, 1))
+  }
+
+  const goToToday = () => {
+    setSelectedDate(new Date())
+  }
+
+  const addFamilyMember = async () => {
+    if (!newMemberName.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter a name for the family member",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setAddingMember(true)
+      const db: any = await getDb()
+      const { doc, updateDoc, arrayUnion } = await import("firebase/firestore")
+
+      const userDocRef = doc(db, "users", user.id)
+      const newMember = {
+        name: newMemberName.trim(),
+        ...(newMemberEmail.trim() && { email: newMemberEmail.trim() })
+      }
+
+      await updateDoc(userDocRef, {
+        familyMembers: arrayUnion(newMember),
+      })
+
+      setFamilyMembers((prev) => [...prev, newMember])
+      setNewMemberName("")
+      setNewMemberEmail("")
+
+      toast({
+        title: "Family Member Added",
+        description: `${newMemberName.trim()} has been added to your family.`,
+      })
+    } catch (error) {
+      console.error("Error adding family member:", error)
+      toast({
+        title: "Failed to Add Member",
+        description: "Could not add family member. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setAddingMember(false)
+    }
+  }
+
+  const removeFamilyMember = async (memberToRemove: FamilyMember) => {
+    if (familyMembers.length <= 1) {
+      toast({
+        title: "Cannot Remove",
+        description: "You need at least one family member.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const db: any = await getDb()
+      const { doc, updateDoc } = await import("firebase/firestore")
+
+      const userDocRef = doc(db, "users", user.id)
+      const updatedMembers = familyMembers.filter((m) => 
+        m.name !== memberToRemove.name || m.email !== memberToRemove.email
+      )
+
+      await updateDoc(userDocRef, {
+        familyMembers: updatedMembers,
+      })
+
+      setFamilyMembers(updatedMembers)
+
+      toast({
+        title: "Family Member Removed",
+        description: `${memberToRemove.name} has been removed from your family.`,
+      })
+    } catch (error) {
+      console.error("Error removing family member:", error)
+      toast({
+        title: "Failed to Remove Member",
+        description: "Could not remove family member. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} className="mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your family account...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!familyCode) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4">
-              <Image src="/images/berry-logo.png" alt="Berry" width={200} height={60} />
-            </div>
-            <div className="flex items-center gap-2 mb-4">
-              <Button variant="ghost" size="sm" onClick={handleBackToLogin}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-            </div>
-            <CardTitle className="text-2xl font-bold">Join a Family</CardTitle>
-            <CardDescription>Enter the family code to join an existing family</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="joinName">Your Name *</Label>
-                <Input
-                  id="joinName"
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value)
-                    if (nameError) setNameError("")
-                  }}
-                  className={nameError ? "border-red-500" : ""}
-                  required
-                />
-                {nameError && (
-                  <Alert variant="destructive" className="py-2">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-sm">{nameError}</AlertDescription>
-                  </Alert>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="familyCode">Family Code *</Label>
-                <Input
-                  id="familyCode"
-                  placeholder="Enter the 6-digit family code"
-                  value={familyCode}
-                  onChange={(e) => {
-                    setFamilyCode(e.target.value.toUpperCase())
-                    if (familyCodeError) setFamilyCodeError("")
-                  }}
-                  className={`font-mono ${familyCodeError ? "border-red-500" : ""}`}
-                  maxLength={6}
-                  required
-                />
-                {familyCodeError && (
-                  <Alert variant="destructive" className="py-2">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-sm">{familyCodeError}</AlertDescription>
-                  </Alert>
-                )}
-              </div>
-
-              <Button onClick={() => handleGoogleLogin(true, false)} className="w-full h-12" disabled={loading}>
-                {loading ? "Joining..." : "Join Family"}
-              </Button>
-
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              <div className="bg-blue-50 p-3 rounded-lg">
-                <p className="text-xs text-blue-700 text-center">
-                  💡 Ask your family member for the 6-digit code<br/>
-                  It looks like: <strong>AU5Z23</strong>
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="text-center max-w-md">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Family Setup Required</h2>
+          <p className="text-gray-600 mb-4">
+            Your family account is not properly set up. Please complete the setup process to start tracking activities.
+          </p>
+          <Button onClick={() => window.location.reload()}>Refresh Page</Button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4">
-            <Image src="/images/berry-logo.png" alt="Berry" width={200} height={60} />
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white p-4 border-b border-gray-100">
+        <div className="max-w-md mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button onClick={goToToday} className="hover:opacity-80 transition-opacity">
+              <Image src="/images/berry-logo.png" alt="Berry" width={150} height={50} />
+            </button>
           </div>
-          <CardTitle className="text-2xl font-bold">Welcome to Berry</CardTitle>
-          <CardDescription>Track your dog's daily activities with your family</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!firebaseReady ? (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={refreshing || loadingEntries}
+              className="h-10 w-10"
+              title="Refresh activities"
+            >
+              <RefreshCw className={`h-5 w-5 text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
+            <Dialog open={showFamilyDialog} onOpenChange={setShowFamilyDialog}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10">
+                  <UserPlus className="h-5 w-5 text-gray-600" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Manage Family Members</DialogTitle>
+                  <DialogDescription>Add or remove family members who can log activities.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Current Family Members</h3>
+                    <div className="space-y-2">
+                      {familyMembers.map((member, index) => (
+                        <div key={`${member.name}-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-gray-500" />
+                            <div>
+                              <span className="font-medium">{member.name}</span>
+                              {member.email && (
+                                <div className="text-xs text-gray-500">{member.email}</div>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFamilyMember(member)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <X className="h-4 w-4 text-gray-500" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium">Add New Member</h3>
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor="memberName">Name *</Label>
+                        <Input
+                          id="memberName"
+                          placeholder="Enter name"
+                          value={newMemberName}
+                          onChange={(e) => setNewMemberName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="memberEmail">Email (optional)</Label>
+                        <Input
+                          id="memberEmail"
+                          type="email"
+                          placeholder="Enter email"
+                          value={newMemberEmail}
+                          onChange={(e) => setNewMemberEmail(e.target.value)}
+                        />
+                      </div>
+                      <Button
+                        onClick={addFamilyMember}
+                        disabled={addingMember || !newMemberName.trim()}
+                        className="w-full"
+                      >
+                        {addingMember ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                        ) : (
+                          <span>Add Member</span>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Family Code</h3>
+                    <p className="text-sm text-gray-500">
+                      Share this code with others so they can join your family:
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Input value={familyCode} readOnly className="font-mono" />
+                      <Button onClick={copyFamilyCode} className="shrink-0">
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => setShowFamilyDialog(false)}>Done</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <Button variant="ghost" size="icon" onClick={handleSignOut} className="h-10 w-10">
+              <Image
+                src={user.avatar || "/placeholder.svg"}
+                alt={user.name}
+                width={32}
+                height={32}
+                className="rounded-full"
+              />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-md mx-auto p-4">
+        {/* Date Navigation */}
+        <div className="bg-white rounded-xl p-4 shadow-sm mb-4 border border-gray-100 flex items-center justify-between">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToPreviousDay}
+            className="h-8 w-8 rounded-full hover:bg-gray-100"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-2 text-gray-600">
+            <CalendarIcon className="h-4 w-4" />
+            <div className="text-sm">{format(selectedDate, "dd/MM/yyyy")}</div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goToNextDay}
+            disabled={isToday(selectedDate) || selectedDate > new Date()}
+            className="h-8 w-8 rounded-full hover:bg-gray-100 disabled:opacity-50"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Welcome Message with Dog Name */}
+        <div className="text-center mb-6">
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <PawPrint className="h-6 w-6 text-gray-600" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-700">
+            Welcome, {dogName}'s family!
+          </h1>
+        </div>
+
+        {/* Log Activity Card */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <h2 className="text-base text-gray-600 mb-6">Log Activity</h2>
+
+          {/* Activity Type Buttons */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <button
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
+                selectedActivity === "pee"
+                  ? "bg-yellow-500 text-white border-yellow-500"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+              onClick={() => setSelectedActivity("pee")}
+            >
+              <Droplets className="h-6 w-6" />
+              <span className="text-sm">Pee</span>
+            </button>
+            <button
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
+                selectedActivity === "poop"
+                  ? "bg-amber-700 text-white border-amber-700"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+              onClick={() => setSelectedActivity("poop")}
+            >
+              <Waves className="h-6 w-6" />
+              <span className="text-sm">Poop</span>
+            </button>
+            <button
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
+                selectedActivity === "food"
+                  ? "bg-teal-500 text-white border-teal-500"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+              onClick={() => setSelectedActivity("food")}
+            >
+              <Utensils className="h-6 w-6" />
+              <span className="text-sm">Food</span>
+            </button>
+          </div>
+
+          {/* Time and Added By */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+                <Clock className="h-4 w-4" />
+                <span>Time</span>
+              </div>
+              <Input type="time" value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+                <User className="h-4 w-4" />
+                <span>Added by</span>
+              </div>
+              <Select value={selectedMember} onValueChange={setSelectedMember}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {familyMembers.map((member, index) => (
+                    <SelectItem key={`${member.name}-${index}`} value={member.name}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Amount - Only for food */}
+          {selectedActivity === "food" && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+                <Utensils className="h-4 w-4" />
+                <span>Grams *</span>
+              </div>
+              <Input
+                type="text"
+                placeholder="Grams"
+                value={amount}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, ''); // Only allow numbers
+                  if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 200)) {
+                    setAmount(value);
+                  }
+                }}
+                className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                style={{ MozAppearance: 'textfield' }}
+                required
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Enter amount between 1-200 grams
+              </div>
+            </div>
+          )}
+
+          {/* Note */}
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+              <FileText className="h-4 w-4" />
+              <span>Note</span>
+            </div>
+            <Input
+              placeholder="Quick note..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="text-sm"
+            />
+          </div>
+
+          {/* Log Button */}
+          <Button
+            className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3"
+            onClick={handleLogActivity}
+            disabled={selectedDate > new Date() || saving}
+          >
+            {saving ? "Saving..." : selectedDate > new Date() ? "Cannot log future activities" : "Log Activity"}
+          </Button>
+        </div>
+
+        {/* Activities */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base text-gray-600">Activities</h2>
+            {loadingEntries && (
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-300"></div>
+            )}
+          </div>
+          {entries.length === 0 && !loadingEntries ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
-              <p className="text-gray-600">Initializing app...</p>
-              {error && (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+              <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <Clock className="h-8 w-8 text-gray-400" />
+              </div>
+              <h3 className="font-medium text-gray-700 mb-1">No activities logged yet</h3>
+              <p className="text-gray-500 text-sm">Start tracking {dogName}'s routine above!</p>
             </div>
           ) : (
-            <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid grid-cols-2 mb-6">
-                <TabsTrigger value="login">Log In</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="login">
-                <div className="space-y-4">
-                  <Button onClick={() => handleGoogleLogin(false, false)} className="w-full h-12" disabled={loading}>
-                    <GoogleIcon className="w-5 h-5 mr-3" />
-                    {loading ? "Logging in..." : "Log in with Google"}
-                  </Button>
-
-                  {error && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  <p className="text-xs text-center text-gray-600 mt-4">
-                    Will automatically find your family or guide you to join one
-                  </p>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="signup">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Your Name *</Label>
-                    <Input
-                      id="name"
-                      placeholder="Enter your name"
-                      value={name}
-                      onChange={(e) => {
-                        setName(e.target.value)
-                        if (nameError) setNameError("")
-                      }}
-                      className={nameError ? "border-red-500" : ""}
-                      required
-                    />
-                    {nameError && (
-                      <Alert variant="destructive" className="py-2">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-sm">{nameError}</AlertDescription>
-                      </Alert>
-                    )}
+            <div className="space-y-3">
+              {entries.map((entry) => (
+                <div 
+                  key={entry.id} 
+                  className="relative overflow-hidden rounded-lg bg-gray-50"
+                >
+                  {/* Main content */}
+                  <div 
+                    className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ease-out ${
+                      swipedEntry === entry.id ? 'transform -translate-x-20' : 'transform translate-x-0'
+                    }`}
+                    onTouchStart={(e) => handleTouchStart(e, entry.id)}
+                    onTouchMove={(e) => handleTouchMove(e, entry.id)}
+                    onTouchEnd={handleTouchEnd}
+                    onMouseDown={(e) => handleMouseDown(e, entry.id)}
+                    onMouseMove={(e) => handleMouseMove(e, entry.id)}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={() => setIsDragging(false)}
+                    style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+                  >
+                    <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
+                      {getActivityIcon(entry.type)}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm text-gray-600">
+                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                      </div>
+                      <div className="text-xs text-gray-600">By {entry.addedBy}</div>
+                      {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
+                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
+                    </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="dogName">Your Dog's Name *</Label>
-                    <Input
-                      id="dogName"
-                      placeholder="Enter your dog's name"
-                      value={dogName}
-                      onChange={(e) => {
-                        setDogName(e.target.value)
-                        if (dogNameError) setDogNameError("")
-                      }}
-                      className={dogNameError ? "border-red-500" : ""}
-                      required
-                    />
-                    {dogNameError && (
-                      <Alert variant="destructive" className="py-2">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription className="text-sm">{dogNameError}</AlertDescription>
-                      </Alert>
-                    )}
+                  
+                  {/* Delete button - revealed on swipe */}
+                  <div 
+                    className={`absolute right-0 top-0 h-full w-20 bg-red-500 flex items-center justify-center transition-transform duration-200 ease-out ${
+                      swipedEntry === entry.id ? 'transform translate-x-0' : 'transform translate-x-full'
+                    }`}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteEntry(entry.id)}
+                      disabled={deletingEntry === entry.id}
+                      className="h-12 w-12 rounded-full text-white hover:bg-red-600 hover:text-white"
+                    >
+                      {deletingEntry === entry.id ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                      ) : (
+                        <Trash2 className="h-5 w-5" />
+                      )}
+                    </Button>
                   </div>
-
-                  <Button onClick={() => handleGoogleLogin(false, true)} className="w-full h-12" disabled={loading}>
-                    <GoogleIcon className="w-5 h-5 mr-3" />
-                    {loading ? "Signing up..." : "Sign up with Google"}
-                  </Button>
-
-                  {error && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  <p className="text-xs text-center text-gray-600 mt-4">
-                    Creates a new family account for your dog
-                  </p>
                 </div>
-              </TabsContent>
-            </Tabs>
+              ))}
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </main>
     </div>
-  )
-}
-
-function GoogleIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" {...props}>
-      <path
-        fill="currentColor"
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-      />
-      <path
-        fill="currentColor"
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-      />
-      <path
-        fill="currentColor"
-        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-      />
-      <path
-        fill="currentColor"
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-      />
-    </svg>
   )
 }
