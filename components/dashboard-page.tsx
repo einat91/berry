@@ -143,10 +143,23 @@ export function DashboardPage({ user }: DashboardPageProps) {
         const members = userData.familyMembers || [user.name]
         const formattedMembers = members.map((member: any) => {
           if (typeof member === 'string') {
+            // If it's just a string name, check if it's the current user
+            if (member === user.name) {
+              return { name: member, email: user.email }
+            }
             return { name: member }
           }
           return member
         })
+        
+        // Make sure current user is in the list with their email
+        const currentUserExists = formattedMembers.some(member => 
+          member.name === user.name || member.email === user.email
+        )
+        
+        if (!currentUserExists) {
+          formattedMembers.unshift({ name: user.name, email: user.email })
+        }
         
         setFamilyMembers(formattedMembers)
       } else {
