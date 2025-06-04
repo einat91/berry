@@ -103,28 +103,34 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const usersRef = collection(db, "users")
       const querySnapshot = await getDocs(usersRef)
       
-      console.log("📂 Found", querySnapshot.docs.length, "user documents")
+      console.log("📂 Found", querySnapshot.docs.length, "documents")
       
       for (const doc of querySnapshot.docs) {
         const data = doc.data()
         
-        if (!data.familyMembers || !Array.isArray(data.familyMembers)) {
+        if (!data.familyMembers) {
           continue
         }
         
-        console.log(`👨‍👩‍👧‍👦 Checking family "${data.dogName}"`)
+        console.log("👨‍👩‍👧‍👦 Checking family with", data.familyMembers.length, "members")
         
-        // Check each family member
-        for (const member of data.familyMembers) {
-          if (typeof member === 'object' && member.email) {
-            console.log(`📧 Comparing: "${member.email.toLowerCase().trim()}" vs "${userEmail.toLowerCase().trim()}"`)
+        for (let i = 0; i < data.familyMembers.length; i++) {
+          const member = data.familyMembers[i]
+          
+          let memberEmail = null
+          
+          if (typeof member === 'string') {
+            memberEmail = member
+          } else if (member && typeof member === 'object') {
+            memberEmail = member.email
+          }
+          
+          if (memberEmail) {
+            console.log(`📧 Comparing: "${memberEmail.toLowerCase()}" vs "${userEmail.toLowerCase()}"`)
             
-            if (member.email.toLowerCase().trim() === userEmail.toLowerCase().trim()) {
-              console.log("✅ MATCH FOUND! User is part of", data.dogName, "'s family")
-              return {
-                id: doc.id,
-                data: () => data
-              }
+            if (memberEmail.toLowerCase().trim() === userEmail.toLowerCase().trim()) {
+              console.log("✅ PERFECT MATCH FOUND! Returning family data")
+              return doc
             }
           }
         }
@@ -163,7 +169,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const db: any = await getDb()
 
       const { signInWithPopup } = await import("firebase/auth")
-      const { doc, getDoc, setDoc, updateDoc } = await import("firebase/firestore")
+      const { doc, getDoc, setDoc } = await import("firebase/firestore")
 
       const result = await signInWithPopup(auth, provider)
       const user = result.user
@@ -182,7 +188,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const userDocRef = doc(db, "users", user.uid)
       const userDoc = await getDoc(userDocRef)
 
-      // Check if user already has their own family setup
       if (userDoc.exists() && userDoc.data()?.dogName) {
         console.log("✅ User already has family setup, logging in")
         onLogin(loggedInUser)
@@ -190,7 +195,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
 
       if (isSignup) {
-        // Creating new family
         console.log("🆕 Creating new family")
 
         const userData = {
@@ -207,54 +211,34 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         return
       }
 
-      // Regular login - search for existing family by email
       console.log("🔍 Regular login - searching for existing family")
       const familyDoc = await findUserInFamily(user.email, db)
       
       if (familyDoc) {
         const familyData = familyDoc.data()
-        console.log("🎉 Found existing family!")
+        console.log("🎉 Found existing family! Joining automatically")
+        console.log("Family details:", {
+          dogName: familyData.dogName,
+          members: familyData.familyMembers
+        })
         
-        // Create user document that references the family
         await setDoc(userDocRef, {
           name: displayName,
           email: user.email,
           dogName: familyData.dogName,
           familyMembers: familyData.familyMembers,
-          familyDocId: familyDoc.id,
+          photoUrl: familyData.photoUrl,
           createdAt: new Date(),
-        })
-        
-        // Update the member's name in the family document
-        const updatedMembers = familyData.familyMembers.map((member: any) => {
-          if (typeof member === 'object' && member.email === user.email) {
-            return { ...member, name: displayName }
-          }
-          return member
-        })
-        
-        const familyDocRef = doc(db, "users", familyDoc.id)
-        await updateDoc(familyDocRef, {
-          familyMembers: updatedMembers
-        })
-        
-        toast({
-          title: "Welcome to the Family!",
-          description: `You've been connected to ${familyData.dogName}'s family.`,
         })
         
         onLogin(loggedInUser)
       } else {
-        // No family found
-        console.log("❓ No family found")
+        console.log("❓ No family found - user needs to sign up or be invited")
         toast({
           title: "No Family Found",
-          description: "No family found for your email. Please sign up to create a new family or ask a family member to add your email first.",
+          description: "No family found for your email. Please sign up to create a new family or ask a family member to add you first.",
           variant: "destructive",
         })
-        
-        // Switch to signup tab
-        setActiveTab("signup")
       }
 
     } catch (err: any) {
@@ -264,11 +248,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           title: "Browser Issue",
           description: "Please use a different browser or enable third-party cookies.",
           variant: "destructive",
-        })
-      } else if (err.code === "auth/popup-closed-by-user") {
-        toast({
-          title: "Login Cancelled",
-          description: "You closed the login window. Please try again.",
         })
       } else {
         toast({
@@ -325,10 +304,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     </Alert>
                   )}
 
-                  <div className="space-y-2 text-xs text-center text-gray-600 mt-4">
-                    <p>✓ Automatically finds your family if invited by email</p>
-                    <p>✓ No signup needed if you've been added to a family</p>
-                  </div>
+                  <p className="text-xs text-center text-gray-600 mt-4">
+                    Will automatically find your family if you have been invited
+                  </p>
                 </div>
               </TabsContent>
 
@@ -346,10 +324,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="dogName">Your Dog's Name *</Label>
+                    <Label htmlFor="dogName">Your Dog Name *</Label>
                     <Input
                       id="dogName"
-                      placeholder="Enter your dog's name"
+                      placeholder="Enter your dog name"
                       value={dogName}
                       onChange={(e) => setDogName(e.target.value)}
                       required
@@ -358,7 +336,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
                   <Button onClick={() => handleGoogleLogin(true)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
-                    {loading ? "Creating family..." : "Create new family"}
+                    {loading ? "Signing up..." : "Sign up with Google"}
                   </Button>
 
                   {error && (
