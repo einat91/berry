@@ -140,26 +140,27 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        // Start fresh - current user first
+        // Start fresh - current user first (name only, no email display)
         const currentUser = { 
-          name: user.name, 
-          email: user.email 
+          name: user.name
         }
         
         // Get all family members and filter out ANY reference to current user
         let otherMembers = []
         if (userData.familyMembers && Array.isArray(userData.familyMembers)) {
           otherMembers = userData.familyMembers.filter((member: any) => {
-            // Filter out current user by email (most reliable)
-            if (typeof member === 'object' && member.email === user.email) {
+            // Filter out current user by email (if both have emails) - case insensitive
+            if (typeof member === 'object' && member.email && user.email && 
+                member.email.toLowerCase() === user.email.toLowerCase()) {
               return false
             }
-            // Filter out current user by name
-            if (typeof member === 'string' && member === user.name) {
+            // Filter out current user by name - case insensitive
+            if (typeof member === 'string' && member.toLowerCase() === user.name.toLowerCase()) {
               return false
             }
-            // Filter out if it's an object with the same name as current user
-            if (typeof member === 'object' && member.name === user.name) {
+            // Filter out if it's an object with the same name as current user - case insensitive
+            if (typeof member === 'object' && member.name && user.name &&
+                member.name.toLowerCase() === user.name.toLowerCase()) {
               return false
             }
             // Keep all others
@@ -491,9 +492,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                             <User className="h-4 w-4 text-gray-500" />
                             <div>
                               <span className="font-medium">{member.name}</span>
-                              {(member.email || (member.name === user.name && user.email)) && (
+                              {member.email && member.email !== user.email && (
                                 <div className="text-xs text-gray-500">
-                                  {member.email || (member.name === user.name ? user.email : '')}
+                                  {member.email}
                                 </div>
                               )}
                             </div>
