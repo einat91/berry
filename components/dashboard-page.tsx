@@ -9,8 +9,6 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Copy,
-  Check,
   Droplets,
   Waves,
   Utensils,
@@ -64,7 +62,6 @@ interface Entry {
   addedBy: string
   amount?: string
   userId: string
-  familyCode: string
 }
 
 interface FamilyMember {
@@ -82,12 +79,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [entries, setEntries] = useState<Entry[]>([])
   const [dogName, setDogName] = useState("")
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
-  const [familyCode, setFamilyCode] = useState("")
   const [selectedActivity, setSelectedActivity] = useState<"pee" | "poop" | "food" | null>(null)
   const [selectedTime, setSelectedTime] = useState(format(new Date(), "HH:mm"))
   const [selectedMember, setSelectedMember] = useState("")
   const [note, setNote] = useState("")
-  const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [loadingEntries, setLoadingEntries] = useState(false)
@@ -109,10 +104,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }, [])
 
   useEffect(() => {
-    if (familyCode) {
+    if (familyMembers.length > 0) {
       loadEntries()
     }
-  }, [selectedDate, familyCode])
+  }, [selectedDate, familyMembers])
 
   useEffect(() => {
     if (familyMembers.length > 0 && !selectedMember) {
@@ -152,7 +147,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
             email: user.email,
             dogName: userData.dogName,
             familyMembers: userData.familyMembers,
-            familyCode: userData.familyCode,
             photoUrl: userData.photoUrl,
             createdAt: new Date(),
           })
@@ -172,7 +166,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
         })
         
         setFamilyMembers(formattedMembers)
-        setFamilyCode(userData.familyCode || "")
       } else {
         toast({
           title: "Setup Required",
@@ -193,7 +186,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const loadEntries = async () => {
-    if (!familyCode) return
+    if (!familyMembers.length) return
 
     try {
       setLoadingEntries(true)
@@ -203,10 +196,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
 
-      // Fixed query - removed the problematic orderBy that was causing issues
+      // Query entries for this user and date
       const q = query(
         entriesRef,
-        where("familyCode", "==", familyCode),
+        where("userId", "==", user.id),
         where("date", "==", dateKey)
       )
 
@@ -239,6 +232,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
     setRefreshing(true)
     try {
       await loadEntries()
+      // Reset the selected time to current time
+      setSelectedTime(format(new Date(), "HH:mm"))
       toast({
         title: "Refreshed",
         description: "Activities have been refreshed successfully!",
@@ -349,7 +344,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const saveEntry = async (entry: Entry) => {
-    if (!familyCode) {
+    if (!familyMembers.length) {
       toast({
         title: "Family Setup Required",
         description: "Please complete your family setup before logging activities.",
@@ -365,7 +360,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       console.log("🔍 Attempting to save entry:", entry)
       console.log("📊 Current user:", user)
-      console.log("🏠 Family code:", familyCode)
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       
@@ -375,7 +369,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
         timestamp: Timestamp.fromDate(entry.timestamp),
         addedBy: entry.addedBy,
         userId: user.id,
-        familyCode: familyCode,
         date: dateKey,
         createdAt: Timestamp.fromDate(new Date()),
       }
@@ -491,7 +484,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       timestamp,
       addedBy: selectedMember,
       userId: user.id,
-      familyCode: familyCode,
       ...(note && { notes: note }),
       ...(selectedActivity === "food" && amount && { amount: `${amount}g` }),
     }
@@ -535,16 +527,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     } catch (error) {
       console.error("Error signing out:", error)
     }
-  }
-
-  const copyFamilyCode = () => {
-    navigator.clipboard.writeText(familyCode)
-    setCopied(true)
-    toast({
-      title: "Copied!",
-      description: "Family code copied to clipboard",
-    })
-    setTimeout(() => setCopied(false), 2000)
   }
 
   const goToPreviousDay = () => {
@@ -655,7 +637,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     )
   }
 
-  if (!familyCode) {
+  if (!familyMembers.length) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center max-w-md">
@@ -712,8 +694,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
                             <User className="h-4 w-4 text-gray-500" />
                             <div>
                               <span className="font-medium">{member.name}</span>
-                              {member.email && (
-                                <div className="text-xs text-gray-500">{member.email}</div>
+                              {(member.email || (member.name === user.name && user.email)) && (
+                                <div className="text-xs text-gray-500">
+                                  {member.email || (member.name === user.name ? user.email : '')}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -761,18 +745,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
                         ) : (
                           <span>Add Member</span>
                         )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Family Code</h3>
-                    <p className="text-sm text-gray-500">
-                      Share this code with others so they can join your family:
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Input value={familyCode} readOnly className="font-mono" />
-                      <Button onClick={copyFamilyCode} className="shrink-0">
-                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
                     </div>
                   </div>
