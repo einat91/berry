@@ -34,17 +34,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 
 interface UserType {
@@ -120,7 +109,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const db: any = await getDb()
       const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
-      // First try to get user's own document
       const userDocRef = doc(db, "users", user.id)
       const userDocSnap = await getDoc(userDocRef)
 
@@ -129,18 +117,14 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userDocSnap.exists()) {
         userData = userDocSnap.data()
       } else {
-        // If user doesn't have a document, they might be part of someone else's family
-        // Search for families where this user is a member
         const usersRef = collection(db, "users")
         const q = query(usersRef, where("familyMembers", "array-contains", user.name))
         const querySnapshot = await getDocs(q)
 
         if (!querySnapshot.empty) {
-          // Found a family that includes this user
           const familyDoc = querySnapshot.docs[0]
           userData = familyDoc.data()
           
-          // Create user document with family data
           const { setDoc } = await import("firebase/firestore")
           await setDoc(userDocRef, {
             name: user.name,
@@ -156,7 +140,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        // Convert familyMembers to proper format
         const members = userData.familyMembers || [user.name]
         const formattedMembers = members.map((member: any) => {
           if (typeof member === 'string') {
@@ -196,7 +179,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
 
-      // Query entries for this user and date
       const q = query(
         entriesRef,
         where("userId", "==", user.id),
@@ -210,7 +192,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
         timestamp: doc.data().timestamp.toDate(),
       })) as Entry[]
 
-      // Sort in memory instead of using Firebase orderBy
       loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
@@ -232,7 +213,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     setRefreshing(true)
     try {
       await loadEntries()
-      // Reset the selected time to current time
       setSelectedTime(format(new Date(), "HH:mm"))
       toast({
         title: "Refreshed",
@@ -258,10 +238,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const entryRef = doc(db, "entries", entryId)
       await deleteDoc(entryRef)
 
-      // Remove from local state
       setEntries((prevEntries) => prevEntries.filter((entry) => entry.id !== entryId))
-      
-      // Reset swipe state
       setSwipedEntry(null)
 
       toast({
@@ -294,7 +271,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     
     const deltaX = startX - touch.clientX
     
-    // Only allow left swipe (positive deltaX)
     if (deltaX > 20) {
       setSwipedEntry(entryId)
     } else if (deltaX < -10) {
@@ -306,7 +282,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     setIsDragging(false)
     const deltaX = startX - currentX
     
-    // If swipe distance is less than threshold, close the swipe
     if (deltaX < 60) {
       setSwipedEntry(null)
     }
@@ -325,7 +300,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     
     const deltaX = startX - e.clientX
     
-    // Only allow left swipe (positive deltaX)
     if (deltaX > 20) {
       setSwipedEntry(entryId)
     } else if (deltaX < -10) {
@@ -337,7 +311,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     setIsDragging(false)
     const deltaX = startX - currentX
     
-    // If swipe distance is less than threshold, close the swipe
     if (deltaX < 60) {
       setSwipedEntry(null)
     }
@@ -363,7 +336,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       
-      // Simplified entry data structure
       const entryData = {
         type: entry.type,
         timestamp: Timestamp.fromDate(entry.timestamp),
@@ -373,7 +345,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
         createdAt: Timestamp.fromDate(new Date()),
       }
 
-      // Add optional fields only if they exist
       if (entry.notes && entry.notes.trim()) {
         entryData.notes = entry.notes.trim()
       }
@@ -660,170 +631,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           <div className="flex items-center gap-2">
             <button onClick={goToToday} className="hover:opacity-80 transition-opacity">
               <Image src="/images/berry-logo.png" alt="Berry" width={150} height={50} />
-          </div>
-
-          {/* Time and Added By */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <Clock className="h-4 w-4" />
-                <span>Time</span>
-              </div>
-              <Input type="time" value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <User className="h-4 w-4" />
-                <span>Added by</span>
-              </div>
-              <Select value={selectedMember} onValueChange={setSelectedMember}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select member" />
-                </SelectTrigger>
-                <SelectContent>
-                  {familyMembers.map((member, index) => (
-                    <SelectItem key={`${member.name}-${index}`} value={member.name}>
-                      {member.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Amount - Only for food */}
-          {selectedActivity === "food" && (
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <Utensils className="h-4 w-4" />
-                <span>Grams *</span>
-              </div>
-              <Input
-                type="text"
-                placeholder="Grams"
-                value={amount}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, ''); // Only allow numbers
-                  if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 200)) {
-                    setAmount(value);
-                  }
-                }}
-                className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                style={{ MozAppearance: 'textfield' }}
-                required
-              />
-              <div className="text-xs text-gray-500 mt-1">
-                Enter amount between 1-200 grams
-              </div>
-            </div>
-          )}
-
-          {/* Note */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-              <FileText className="h-4 w-4" />
-              <span>Note</span>
-            </div>
-            <Input
-              placeholder="Quick note..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="text-sm"
-            />
-          </div>
-
-          {/* Log Button */}
-          <Button
-            className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3"
-            onClick={handleLogActivity}
-            disabled={selectedDate > new Date() || saving}
-          >
-            {saving ? "Saving..." : selectedDate > new Date() ? "Cannot log future activities" : "Log Activity"}
-          </Button>
-        </div>
-
-        {/* Activities */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base text-gray-600">Activities</h2>
-            {loadingEntries && (
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-300"></div>
-            )}
-          </div>
-          {entries.length === 0 && !loadingEntries ? (
-            <div className="text-center py-8">
-              <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                <Clock className="h-8 w-8 text-gray-400" />
-              </div>
-              <h3 className="font-medium text-gray-700 mb-1">No activities logged yet</h3>
-              <p className="text-gray-500 text-sm">Start tracking {dogName}'s routine above!</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {entries.map((entry) => (
-                <div 
-                  key={entry.id} 
-                  className="relative overflow-hidden rounded-lg bg-gray-50"
-                >
-                  {/* Main content */}
-                  <div 
-                    className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ease-out ${
-                      swipedEntry === entry.id ? 'transform -translate-x-20' : 'transform translate-x-0'
-                    }`}
-                    onTouchStart={(e) => handleTouchStart(e, entry.id)}
-                    onTouchMove={(e) => handleTouchMove(e, entry.id)}
-                    onTouchEnd={handleTouchEnd}
-                    onMouseDown={(e) => handleMouseDown(e, entry.id)}
-                    onMouseMove={(e) => handleMouseMove(e, entry.id)}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={() => setIsDragging(false)}
-                    style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-                  >
-                    <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
-                      {getActivityIcon(entry.type)}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm text-gray-600">
-                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
-                      </div>
-                      <div className="text-xs text-gray-600">By {entry.addedBy}</div>
-                      {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
-                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
-                    </div>
-                  </div>
-                  
-                  {/* Delete button - revealed on swipe */}
-                  <div 
-                    className={`absolute right-0 top-0 h-full w-20 bg-red-500 flex items-center justify-center transition-transform duration-200 ease-out ${
-                      swipedEntry === entry.id ? 'transform translate-x-0' : 'transform translate-x-full'
-                    }`}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteEntry(entry.id)}
-                      disabled={deletingEntry === entry.id}
-                      className="h-12 w-12 rounded-full text-white hover:bg-red-600 hover:text-white"
-                    >
-                      {deletingEntry === entry.id ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                      ) : (
-                        <Trash2 className="h-5 w-5" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  )
-}
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -1005,19 +813,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
               <Utensils className="h-6 w-6" />
               <span className="text-sm">Food</span>
             </button>
-              <span className="text-sm">Poop</span>
-            </button>
-            <button
-              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
-                selectedActivity === "food"
-                  ? "bg-teal-500 text-white border-teal-500"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-              }`}
-              onClick={() => setSelectedActivity("food")}
-            >
-              <Utensils className="h-6 w-6" />
-              <span className="text-sm">Food</span>
-            </button>
           </div>
 
           {/* Time and Added By */}
@@ -1054,131 +849,3 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Utensils className="h-4 w-4" />
-                <span>Grams *</span>
-              </div>
-              <Input
-                type="text"
-                placeholder="Grams"
-                value={amount}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, ''); // Only allow numbers
-                  if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 200)) {
-                    setAmount(value);
-                  }
-                }}
-                className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                style={{ MozAppearance: 'textfield' }}
-                required
-              />
-              <div className="text-xs text-gray-500 mt-1">
-                Enter amount between 1-200 grams
-              </div>
-            </div>
-          )}
-
-          {/* Note */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-              <FileText className="h-4 w-4" />
-              <span>Note</span>
-            </div>
-            <Input
-              placeholder="Quick note..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="text-sm"
-            />
-          </div>
-
-          {/* Log Button */}
-          <Button
-            className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3"
-            onClick={handleLogActivity}
-            disabled={selectedDate > new Date() || saving}
-          >
-            {saving ? "Saving..." : selectedDate > new Date() ? "Cannot log future activities" : "Log Activity"}
-          </Button>
-        </div>
-
-        {/* Activities */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base text-gray-600">Activities</h2>
-            {loadingEntries && (
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-300"></div>
-            )}
-          </div>
-          {entries.length === 0 && !loadingEntries ? (
-            <div className="text-center py-8">
-              <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                <Clock className="h-8 w-8 text-gray-400" />
-              </div>
-              <h3 className="font-medium text-gray-700 mb-1">No activities logged yet</h3>
-              <p className="text-gray-500 text-sm">Start tracking {dogName}'s routine above!</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {entries.map((entry) => (
-                <div 
-                  key={entry.id} 
-                  className="relative overflow-hidden rounded-lg bg-gray-50"
-                >
-                  {/* Main content */}
-                  <div 
-                    className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ease-out ${
-                      swipedEntry === entry.id ? 'transform -translate-x-20' : 'transform translate-x-0'
-                    }`}
-                    onTouchStart={(e) => handleTouchStart(e, entry.id)}
-                    onTouchMove={(e) => handleTouchMove(e, entry.id)}
-                    onTouchEnd={handleTouchEnd}
-                    onMouseDown={(e) => handleMouseDown(e, entry.id)}
-                    onMouseMove={(e) => handleMouseMove(e, entry.id)}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={() => setIsDragging(false)}
-                    style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-                  >
-                    <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
-                      {getActivityIcon(entry.type)}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm text-gray-600">
-                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
-                      </div>
-                      <div className="text-xs text-gray-600">By {entry.addedBy}</div>
-                      {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
-                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
-                    </div>
-                  </div>
-                  
-                  {/* Delete button - revealed on swipe */}
-                  <div 
-                    className={`absolute right-0 top-0 h-full w-20 bg-red-500 flex items-center justify-center transition-transform duration-200 ease-out ${
-                      swipedEntry === entry.id ? 'transform translate-x-0' : 'transform translate-x-full'
-                    }`}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteEntry(entry.id)}
-                      disabled={deletingEntry === entry.id}
-                      className="h-12 w-12 rounded-full text-white hover:bg-red-600 hover:text-white"
-                    >
-                      {deletingEntry === entry.id ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                      ) : (
-                        <Trash2 className="h-5 w-5" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
-  )
-}
