@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { AlertCircle } from "lucide-react"
 import Image from "next/image"
 import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
+import { useToast } from "@/hooks/use-toast"
 import {
   Alert,
   AlertDescription,
@@ -34,8 +35,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
-  const [nameError, setNameError] = useState("")
-  const [dogNameError, setDogNameError] = useState("")
+  const { toast } = useToast()
 
   useEffect(() => {
     const checkFirebase = async () => {
@@ -66,26 +66,31 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   const clearValidationErrors = () => {
-    setNameError("")
-    setDogNameError("")
     setError("")
   }
 
   const validateSignupForm = () => {
-    let hasErrors = false
     clearValidationErrors()
 
     if (!name.trim()) {
-      setNameError("Name is required")
-      hasErrors = true
+      toast({
+        title: "Name Required",
+        description: "Please enter your name",
+        variant: "destructive",
+      })
+      return false
     }
 
     if (!dogName.trim()) {
-      setDogNameError("Dog's name is required")
-      hasErrors = true
+      toast({
+        title: "Dog's Name Required", 
+        description: "Please enter your dog's name",
+        variant: "destructive",
+      })
+      return false
     }
 
-    return !hasErrors
+    return true
   }
 
   const findUserInFamily = async (userEmail: string, db: any) => {
@@ -141,7 +146,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   const handleGoogleLogin = async (isSignup = false) => {
     if (!firebaseReady) {
-      setError("App is still initializing. Please wait a moment.")
+      toast({
+        title: "Please Wait",
+        description: "App is still initializing. Please wait a moment.",
+        variant: "destructive",
+      })
       return
     }
 
@@ -224,15 +233,27 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         onLogin(loggedInUser)
       } else {
         console.log("❓ No family found - user needs to sign up or be invited")
-        setError("No family found for your email. Please sign up to create a new family or ask a family member to add you first.")
+        toast({
+          title: "No Family Found",
+          description: "No family found for your email. Please sign up to create a new family or ask a family member to add you first.",
+          variant: "destructive",
+        })
       }
 
     } catch (err: any) {
       console.error("❌ Login error:", err)
       if (err.code === "auth/unauthorized-domain") {
-        setError("Please use a different browser or enable third-party cookies.")
+        toast({
+          title: "Browser Issue",
+          description: "Please use a different browser or enable third-party cookies.",
+          variant: "destructive",
+        })
       } else {
-        setError(err.message || "Failed to log in. Please try again.")
+        toast({
+          title: "Login Failed",
+          description: err.message || "Failed to log in. Please try again.",
+          variant: "destructive",
+        })
       }
     } finally {
       setLoading(false)
@@ -296,18 +317,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       id="name"
                       placeholder="Enter your name"
                       value={name}
-                      onChange={(e) => {
-                        setName(e.target.value)
-                        if (nameError) setNameError("")
-                      }}
-                      className={nameError ? "border-red-500" : ""}
+                      onChange={(e) => setName(e.target.value)}
                       required
                     />
-                    {nameError && (
-                      <div className="text-xs text-red-500 mt-1">
-                        {nameError}
-                      </div>
-                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -316,18 +328,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       id="dogName"
                       placeholder="Enter your dog name"
                       value={dogName}
-                      onChange={(e) => {
-                        setDogName(e.target.value)
-                        if (dogNameError) setDogNameError("")
-                      }}
-                      className={dogNameError ? "border-red-500" : ""}
+                      onChange={(e) => setDogName(e.target.value)}
                       required
                     />
-                    {dogNameError && (
-                      <div className="text-xs text-red-500 mt-1">
-                        {dogNameError}
-                      </div>
-                    )}
                   </div>
 
                   <Button onClick={() => handleGoogleLogin(true)} className="w-full h-12" disabled={loading}>
