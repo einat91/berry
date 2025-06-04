@@ -534,10 +534,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     <h3 className="text-sm font-medium">Current Family Members</h3>
                     <div className="space-y-2">
                       {familyMembers.map((member, index) => {
-                        const memberKey = `${member.name}-${index}`
+                        const memberKey = member.name + "-" + index
+                        const isCurrentUser = member.name === user.name
+                        
                         return (
                           <div key={memberKey} className="relative overflow-hidden rounded-md bg-gray-50">
-                            {/* Main content */}
                             <div 
                               className={`flex items-center justify-between p-2 bg-gray-50 rounded-md transition-transform duration-200 ease-out ${
                                 swipedMember === memberKey ? 'transform -translate-x-20' : 'transform translate-x-0'
@@ -555,7 +556,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                                 <User className="h-4 w-4 text-gray-500" />
                                 <div>
                                   <span className="font-medium text-sm">{member.name}</span>
-                                  {member.email && member.name !== user.name && (
+                                  {member.email && !isCurrentUser && (
                                     <div className="text-xs text-gray-500">
                                       {member.email}
                                     </div>
@@ -564,8 +565,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                               </div>
                             </div>
                             
-                            {/* Delete button - revealed on swipe */}
-                            {member.name !== user.name && (
+                            {!isCurrentUser && (
                               <div 
                                 className={`absolute right-0 top-0 h-full w-20 bg-red-500 flex items-center justify-center transition-transform duration-200 ease-out ${
                                   swipedMember === memberKey ? 'transform translate-x-0' : 'transform translate-x-full'
