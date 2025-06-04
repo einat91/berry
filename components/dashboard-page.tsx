@@ -140,26 +140,43 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        const members = userData.familyMembers || []
-        let formattedMembers = members.map((member: any) => {
-          if (typeof member === 'string') {
-            return { name: member }
-          }
-          return member
-        })
-        
-        // Remove any existing entries for the current user (by email)
-        formattedMembers = formattedMembers.filter(member => 
-          member.email !== user.email
-        )
-        
-        // Add current user at the beginning with their actual name and email
-        formattedMembers.unshift({ 
+        // Start fresh - current user first
+        const currentUser = { 
           name: user.name, 
           email: user.email 
-        })
+        }
         
-        setFamilyMembers(formattedMembers)
+        // Get all family members and filter out ANY reference to current user
+        let otherMembers = []
+        if (userData.familyMembers && Array.isArray(userData.familyMembers)) {
+          otherMembers = userData.familyMembers.filter((member: any) => {
+            // Filter out current user by email (most reliable)
+            if (typeof member === 'object' && member.email === user.email) {
+              return false
+            }
+            // Filter out current user by name
+            if (typeof member === 'string' && member === user.name) {
+              return false
+            }
+            // Filter out if it's an object with the same name as current user
+            if (typeof member === 'object' && member.name === user.name) {
+              return false
+            }
+            // Keep all others
+            return true
+          }).map((member: any) => {
+            // Convert any remaining strings to objects
+            if (typeof member === 'string') {
+              return { name: member }
+            }
+            return member
+          })
+        }
+        
+        // Final list: current user first, then others
+        const finalMembers = [currentUser, ...otherMembers]
+        
+        setFamilyMembers(finalMembers)
       } else {
         toast({
           title: "Setup Required",
