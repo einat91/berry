@@ -140,7 +140,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        // Start fresh - current user first (name only, no email display)
+        // Start fresh - current user first (name only, no email shown)
         const currentUser = { 
           name: user.name
         }
@@ -492,7 +492,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                             <User className="h-4 w-4 text-gray-500" />
                             <div>
                               <span className="font-medium">{member.name}</span>
-                              {member.email && member.email !== user.email && (
+                              {member.email && member.name !== user.name && (
                                 <div className="text-xs text-gray-500">
                                   {member.email}
                                 </div>
