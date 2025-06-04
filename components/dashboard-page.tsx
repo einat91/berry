@@ -195,7 +195,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
-      console.log(`Loaded ${loadedEntries.length} entries for ${dateKey}`)
     } catch (error) {
       console.error("Error loading entries:", error)
       toast({
@@ -229,93 +228,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
-  const deleteEntry = async (entryId: string) => {
-    try {
-      setDeletingEntry(entryId)
-      const db: any = await getDb()
-      const { doc, deleteDoc } = await import("firebase/firestore")
-
-      const entryRef = doc(db, "entries", entryId)
-      await deleteDoc(entryRef)
-
-      setEntries((prevEntries) => prevEntries.filter((entry) => entry.id !== entryId))
-      setSwipedEntry(null)
-
-      toast({
-        title: "Activity Deleted",
-        description: "The activity has been deleted successfully.",
-      })
-    } catch (error) {
-      console.error("Error deleting entry:", error)
-      toast({
-        title: "Delete Failed",
-        description: "Could not delete the activity. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setDeletingEntry(null)
-    }
-  }
-
-  const handleTouchStart = (e: React.TouchEvent, entryId: string) => {
-    setStartX(e.touches[0].clientX)
-    setCurrentX(e.touches[0].clientX)
-    setIsDragging(true)
-  }
-
-  const handleTouchMove = (e: React.TouchEvent, entryId: string) => {
-    if (!isDragging) return
-    
-    const touch = e.touches[0]
-    setCurrentX(touch.clientX)
-    
-    const deltaX = startX - touch.clientX
-    
-    if (deltaX > 20) {
-      setSwipedEntry(entryId)
-    } else if (deltaX < -10) {
-      setSwipedEntry(null)
-    }
-  }
-
-  const handleTouchEnd = () => {
-    setIsDragging(false)
-    const deltaX = startX - currentX
-    
-    if (deltaX < 60) {
-      setSwipedEntry(null)
-    }
-  }
-
-  const handleMouseDown = (e: React.MouseEvent, entryId: string) => {
-    setStartX(e.clientX)
-    setCurrentX(e.clientX)
-    setIsDragging(true)
-  }
-
-  const handleMouseMove = (e: React.MouseEvent, entryId: string) => {
-    if (!isDragging) return
-    
-    setCurrentX(e.clientX)
-    
-    const deltaX = startX - e.clientX
-    
-    if (deltaX > 20) {
-      setSwipedEntry(entryId)
-    } else if (deltaX < -10) {
-      setSwipedEntry(null)
-    }
-  }
-
-  const handleMouseUp = () => {
-    setIsDragging(false)
-    const deltaX = startX - currentX
-    
-    if (deltaX < 60) {
-      setSwipedEntry(null)
-    }
-  }
-
   const saveEntry = async (entry: Entry) => {
     if (!familyMembers.length) {
       toast({
@@ -330,9 +242,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       setSaving(true)
       const db: any = await getDb()
       const { collection, addDoc, Timestamp } = await import("firebase/firestore")
-
-      console.log("🔍 Attempting to save entry:", entry)
-      console.log("📊 Current user:", user)
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       
@@ -353,12 +262,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
         entryData.amount = entry.amount.trim()
       }
 
-      console.log("💾 Saving entry data:", entryData)
-
       const entriesRef = collection(db, "entries")
       const docRef = await addDoc(entriesRef, entryData)
-      
-      console.log("✅ Entry saved successfully with ID:", docRef.id)
 
       const newEntryWithId = {
         ...entry,
@@ -375,28 +280,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
       return true
       
     } catch (error) {
-      console.error("❌ Error saving entry:", error)
-      console.error("Error details:", {
-        code: error.code,
-        message: error.message,
-        stack: error.stack
-      })
-      
-      let errorMessage = "Failed to save activity. "
-      
-      if (error.code === 'permission-denied') {
-        errorMessage += "Database permission denied. Please check Firebase rules."
-      } else if (error.code === 'unavailable') {
-        errorMessage += "Database temporarily unavailable. Please try again."
-      } else if (error.message?.includes('offline')) {
-        errorMessage += "You're offline. Please check your internet connection."
-      } else {
-        errorMessage += "Please check your connection and try again."
-      }
+      console.error("Error saving entry:", error)
       
       toast({
         title: "Save Failed",
-        description: errorMessage,
+        description: "Failed to save activity. Please check your connection and try again.",
         variant: "destructive",
       })
       return false
@@ -406,37 +294,12 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const handleLogActivity = async () => {
-    if (!selectedActivity) {
-      toast({
-        title: "Select an activity",
-        description: "Please select an activity type (pee, poop, or food)",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!selectedMember) {
-      toast({
-        title: "Select a family member",
-        description: "Please select who is logging this activity",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!selectedActivity || !selectedMember) return
 
     if (selectedActivity === "food" && (!amount.trim() || parseInt(amount) < 1 || parseInt(amount) > 200)) {
       toast({
         title: "Valid amount required",
         description: "Please enter a valid amount between 1-200 grams",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (selectedDate > new Date()) {
-      toast({
-        title: "Cannot log future activities",
-        description: "You can only log activities for today or past dates",
         variant: "destructive",
       })
       return
@@ -500,27 +363,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
-  const goToPreviousDay = () => {
-    setSelectedDate(subDays(selectedDate, 1))
-  }
-
-  const goToNextDay = () => {
-    setSelectedDate(addDays(selectedDate, 1))
-  }
-
-  const goToToday = () => {
-    setSelectedDate(new Date())
-  }
-
   const addFamilyMember = async () => {
-    if (!newMemberName.trim()) {
-      toast({
-        title: "Name Required",
-        description: "Please enter a name for the family member",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!newMemberName.trim()) return
 
     try {
       setAddingMember(true)
@@ -547,52 +391,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
       })
     } catch (error) {
       console.error("Error adding family member:", error)
-      toast({
-        title: "Failed to Add Member",
-        description: "Could not add family member. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setAddingMember(false)
-    }
-  }
-
-  const removeFamilyMember = async (memberToRemove: FamilyMember) => {
-    if (familyMembers.length <= 1) {
-      toast({
-        title: "Cannot Remove",
-        description: "You need at least one family member.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      const db: any = await getDb()
-      const { doc, updateDoc } = await import("firebase/firestore")
-
-      const userDocRef = doc(db, "users", user.id)
-      const updatedMembers = familyMembers.filter((m) => 
-        m.name !== memberToRemove.name || m.email !== memberToRemove.email
-      )
-
-      await updateDoc(userDocRef, {
-        familyMembers: updatedMembers,
-      })
-
-      setFamilyMembers(updatedMembers)
-
-      toast({
-        title: "Family Member Removed",
-        description: `${memberToRemove.name} has been removed from your family.`,
-      })
-    } catch (error) {
-      console.error("Error removing family member:", error)
-      toast({
-        title: "Failed to Remove Member",
-        description: "Could not remove family member. Please try again.",
-        variant: "destructive",
-      })
     }
   }
 
@@ -625,11 +425,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white p-4 border-b border-gray-100">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button onClick={goToToday} className="hover:opacity-80 transition-opacity">
+            <button onClick={() => setSelectedDate(new Date())} className="hover:opacity-80 transition-opacity">
               <Image src="/images/berry-logo.png" alt="Berry" width={150} height={50} />
             </button>
           </div>
@@ -640,7 +439,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
               onClick={handleRefresh}
               disabled={refreshing || loadingEntries}
               className="h-10 w-10"
-              title="Refresh activities"
             >
               <RefreshCw className={`h-5 w-5 text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>
@@ -672,14 +470,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
                               )}
                             </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFamilyMember(member)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <X className="h-4 w-4 text-gray-500" />
-                          </Button>
                         </div>
                       ))}
                     </div>
@@ -739,12 +529,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
       </header>
 
       <main className="max-w-md mx-auto p-4">
-        {/* Date Navigation */}
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4 border border-gray-100 flex items-center justify-between">
           <Button
             variant="ghost"
             size="icon"
-            onClick={goToPreviousDay}
+            onClick={() => setSelectedDate(subDays(selectedDate, 1))}
             className="h-8 w-8 rounded-full hover:bg-gray-100"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -756,7 +545,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={goToNextDay}
+            onClick={() => setSelectedDate(addDays(selectedDate, 1))}
             disabled={isToday(selectedDate) || selectedDate > new Date()}
             className="h-8 w-8 rounded-full hover:bg-gray-100 disabled:opacity-50"
           >
@@ -764,7 +553,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </Button>
         </div>
 
-        {/* Welcome Message with Dog Name */}
         <div className="text-center mb-6">
           <div className="flex items-center justify-center gap-2 mb-2">
             <PawPrint className="h-6 w-6 text-gray-600" />
@@ -774,11 +562,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </h1>
         </div>
 
-        {/* Log Activity Card */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-base text-gray-600 mb-6">Log Activity</h2>
 
-          {/* Activity Type Buttons */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <button
               className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
@@ -815,7 +601,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
 
-          {/* Time and Added By */}
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
@@ -844,8 +629,91 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </div>
           </div>
 
-          {/* Amount - Only for food */}
           {selectedActivity === "food" && (
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Utensils className="h-4 w-4" />
+                <span>Grams *</span>
+              </div>
+              <Input
+                type="text"
+                placeholder="Grams"
+                value={amount}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '')
+                  if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 200)) {
+                    setAmount(value)
+                  }
+                }}
+                required
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Enter amount between 1-200 grams
+              </div>
+            </div>
+          )}
+
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+              <FileText className="h-4 w-4" />
+              <span>Note</span>
+            </div>
+            <Input
+              placeholder="Quick note..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="text-sm"
+            />
+          </div>
+
+          <Button
+            className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3"
+            onClick={handleLogActivity}
+            disabled={selectedDate > new Date() || saving}
+          >
+            {saving ? "Saving..." : selectedDate > new Date() ? "Cannot log future activities" : "Log Activity"}
+          </Button>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base text-gray-600">Activities</h2>
+            {loadingEntries && (
+              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-300"></div>
+            )}
+          </div>
+          {entries.length === 0 && !loadingEntries ? (
+            <div className="text-center py-8">
+              <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <Clock className="h-8 w-8 text-gray-400" />
+              </div>
+              <h3 className="font-medium text-gray-700 mb-1">No activities logged yet</h3>
+              <p className="text-gray-500 text-sm">Start tracking {dogName}'s routine above!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {entries.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
+                    {getActivityIcon(entry.type)}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm text-gray-600">
+                      {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                    </div>
+                    <div className="text-xs text-gray-600">By {entry.addedBy}</div>
+                    {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
+                    {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
