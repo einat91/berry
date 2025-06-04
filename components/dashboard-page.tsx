@@ -57,6 +57,7 @@ interface FamilyMember {
   name: string
   email?: string
   userId?: string
+  fullName?: string
 }
 
 interface DashboardPageProps {
@@ -122,9 +123,45 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userDocSnap.exists()) {
         userData = userDocSnap.data()
       } else {
+        // Try to find the user in other families
         const usersRef = collection(db, "users")
-        const q = query(usersRef, where("familyMembers", "array-contains", user.name))
-        const querySnapshot = await getDocs(q)
+        const allUsersSnapshot = await getDocs(usersRef)
+        
+        let foundFamily = false
+        for (const docSnapshot of allUsersSnapshot.docs) {
+          const docData = docSnapshot.data()
+          if (docData.familyMembers && Array.isArray(docData.familyMembers)) {
+            // Check if user is in this family by email or name
+            const isInFamily = docData.familyMembers.some((member: any) => {
+              if (typeof member === 'string') {
+                return member === user.name || member === user.email
+              }
+              return member.email === user.email || member.name === user.name
+            })
+            
+            if (isInFamily) {
+              userData = docData
+              foundFamily = true
+              
+              // Create user document with family data
+              const { setDoc } = await import("firebase/firestore")
+              await setDoc(userDocRef, {
+                name: user.name,
+                email: user.email,
+                dogName: docData.dogName,
+                familyMembers: docData.familyMembers,
+                photoUrl: docData.photoUrl,
+                createdAt: new Date(),
+              })
+              break
+            }
+          }
+        }
+        
+        if (!foundFamily) {
+          console.log("No family found for user:", user.email)
+        }
+      }(q)
 
         if (!querySnapshot.empty) {
           const familyDoc = querySnapshot.docs[0]
@@ -145,9 +182,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        // Start with current user from login (show only first name)
+        // Start with current user from login (show only first name for display)
         const firstName = user.name.split(' ')[0]
-        const currentUser = { name: firstName }
+        const currentUser = { 
+          name: firstName,
+          email: user.email,
+          fullName: user.name // Keep full name for matching
+        }
         
         // Get other family members (exclude current user completely)
         let otherMembers = []
@@ -157,9 +198,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
             if (typeof member === 'object' && member.email === user.email) {
               return false
             }
-            // Skip current user by name match  
+            // Skip current user by name match (check both full name and member name)
             const memberName = typeof member === 'string' ? member : member?.name
-            if (memberName === user.name) {
+            if (memberName === user.name || memberName === firstName) {
               return false
             }
             return true
@@ -219,6 +260,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
+      console.log(`Loaded ${loadedEntries.length} entries for ${format(selectedDate, "yyyy-MM-dd")}`)
     } catch (error) {
       console.error("Error loading entries:", error)
       toast({
@@ -513,7 +555,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     try {
       setAddingMember(true)
       const db: any = await getDb()
-      const { doc, updateDoc, arrayUnion } = await import("firebase/firestore")
+      const { doc, updateDoc, arrayUnion, getDoc } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
       const newMember = {
@@ -521,9 +563,20 @@ export function DashboardPage({ user }: DashboardPageProps) {
         ...(newMemberEmail.trim() && { email: newMemberEmail.trim() })
       }
 
+      // Update current user's document
       await updateDoc(userDocRef, {
         familyMembers: arrayUnion(newMember),
       })
+      
+      // If there's a familyDocId, also update the original family document
+      const userDoc = await getDoc(userDocRef)
+      if (userDoc.exists() && userDoc.data().familyDocId) {
+        const familyDocRef = doc(db, "users", userDoc.data().familyDocId)
+        await updateDoc(familyDocRef, {
+          familyMembers: arrayUnion(newMember),
+        })
+        console.log("Updated original family document with new member")
+      }
 
       setFamilyMembers((prev) => [...prev, newMember])
       setNewMemberName("")
@@ -532,7 +585,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       toast({
         title: "Family Member Added",
-        description: `${newMemberName.trim()} has been added to your family.`,
+        description: `${newMemberName.trim()} has been added to your family.${newMemberEmail.trim() ? ' They can now log in with their email.' : ''}`,
       })
     } catch (error) {
       console.error("Error adding family member:", error)
@@ -552,13 +605,24 @@ export function DashboardPage({ user }: DashboardPageProps) {
     
     try {
       const db: any = await getDb()
-      const { doc, updateDoc, arrayRemove } = await import("firebase/firestore")
+      const { doc, updateDoc, arrayRemove, getDoc } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
       
+      // Update current user's document
       await updateDoc(userDocRef, {
         familyMembers: arrayRemove(member),
       })
+      
+      // If there's a familyDocId, also update the original family document
+      const userDoc = await getDoc(userDocRef)
+      if (userDoc.exists() && userDoc.data().familyDocId) {
+        const familyDocRef = doc(db, "users", userDoc.data().familyDocId)
+        await updateDoc(familyDocRef, {
+          familyMembers: arrayRemove(member),
+        })
+        console.log("Updated original family document - removed member")
+      }
 
       setFamilyMembers((prev) => prev.filter((m) => m.name !== member.name))
       setSwipedMember(null)
