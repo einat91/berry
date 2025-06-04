@@ -140,26 +140,24 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        const members = userData.familyMembers || [user.name]
-        const formattedMembers = members.map((member: any) => {
+        const members = userData.familyMembers || []
+        let formattedMembers = members.map((member: any) => {
           if (typeof member === 'string') {
-            // If it's just a string name, check if it's the current user
-            if (member === user.name) {
-              return { name: member, email: user.email }
-            }
             return { name: member }
           }
           return member
         })
         
-        // Make sure current user is in the list with their email
-        const currentUserExists = formattedMembers.some(member => 
-          member.name === user.name || member.email === user.email
+        // Remove any existing entries for the current user (by email)
+        formattedMembers = formattedMembers.filter(member => 
+          member.email !== user.email
         )
         
-        if (!currentUserExists) {
-          formattedMembers.unshift({ name: user.name, email: user.email })
-        }
+        // Add current user at the beginning with their actual name and email
+        formattedMembers.unshift({ 
+          name: user.name, 
+          email: user.email 
+        })
         
         setFamilyMembers(formattedMembers)
       } else {
