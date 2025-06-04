@@ -8,15 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
-import { AlertCircle } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Image from "next/image"
 import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
-import { useToast } from "@/hooks/use-toast"
-import { Toaster } from "@/components/ui/toaster"
-import {
-  Alert,
-  AlertDescription,
-} from "@/components/ui/alert"
 
 interface User {
   id: string
@@ -31,12 +25,13 @@ interface LoginPageProps {
 
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<string>("login")
+  const [familyCode, setFamilyCode] = useState("")
   const [name, setName] = useState("")
   const [dogName, setDogName] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
-  const { toast } = useToast()
+  const [showJoinForm, setShowJoinForm] = useState(false)
 
   useEffect(() => {
     const checkFirebase = async () => {
@@ -66,34 +61,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  const clearValidationErrors = () => {
-    setError("")
-  }
-
-  const validateSignupForm = () => {
-    clearValidationErrors()
-
-    if (!name.trim()) {
-      toast({
-        title: "Name Required",
-        description: "Please enter your name",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    if (!dogName.trim()) {
-      toast({
-        title: "Dog's Name Required", 
-        description: "Please enter your dog's name",
-        variant: "destructive",
-      })
-      return false
-    }
-
-    return true
-  }
-
   const findUserInFamily = async (userEmail: string, db: any) => {
     const { collection, getDocs } = await import("firebase/firestore")
     
@@ -108,17 +75,20 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       for (const doc of querySnapshot.docs) {
         const data = doc.data()
         
-        if (!data.familyMembers) {
+        // Skip if no family data
+        if (!data.familyCode || !data.familyMembers) {
           continue
         }
         
-        console.log("👨‍👩‍👧‍👦 Checking family with", data.familyMembers.length, "members")
+        console.log("👨‍👩‍👧‍👦 Checking family:", data.familyCode, "with", data.familyMembers.length, "members")
         
+        // Check each family member for email match
         for (let i = 0; i < data.familyMembers.length; i++) {
           const member = data.familyMembers[i]
           
           let memberEmail = null
           
+          // Handle different member formats
           if (typeof member === 'string') {
             memberEmail = member
           } else if (member && typeof member === 'object') {
@@ -145,23 +115,32 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  const handleGoogleLogin = async (isSignup = false) => {
+  const handleGoogleLogin = async (isJoining = false, isSignup = false) => {
     if (!firebaseReady) {
-      toast({
-        title: "Please Wait",
-        description: "App is still initializing. Please wait a moment.",
-        variant: "destructive",
-      })
+      setError("App is still initializing. Please wait a moment.")
       return
     }
 
-    clearValidationErrors()
-
-    if (isSignup && !validateSignupForm()) {
-      return
-    }
-
+    setError("")
     setLoading(true)
+
+    if (isJoining && !familyCode) {
+      setError("Please enter a family code")
+      setLoading(false)
+      return
+    }
+
+    if ((isJoining || isSignup) && !name.trim()) {
+      setError("Please enter your name")
+      setLoading(false)
+      return
+    }
+
+    if (isSignup && !dogName.trim()) {
+      setError("Please enter your dog's name")
+      setLoading(false)
+      return
+    }
 
     try {
       const auth: any = await getAuth()
@@ -169,14 +148,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const db: any = await getDb()
 
       const { signInWithPopup } = await import("firebase/auth")
-      const { doc, getDoc, setDoc } = await import("firebase/firestore")
+      const { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs } = await import(
+        "firebase/firestore"
+      )
 
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
       console.log("🔐 User signed in:", user.email)
 
-      const displayName = isSignup ? name.trim() : (user.displayName || "Dog Parent")
+      const displayName = isSignup || isJoining ? name.trim() : (user.displayName || "Dog Parent")
 
       const loggedInUser: User = {
         id: user.uid,
@@ -185,32 +166,78 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         avatar: user.photoURL || "/placeholder.svg",
       }
 
+      // Check if user already exists with family data
       const userDocRef = doc(db, "users", user.uid)
       const userDoc = await getDoc(userDocRef)
 
-      if (userDoc.exists() && userDoc.data()?.dogName) {
+      if (userDoc.exists() && userDoc.data()?.dogName && !isJoining) {
         console.log("✅ User already has family setup, logging in")
+        onLogin(loggedInUser)
+        return
+      }
+
+      if (isJoining) {
+        console.log("👥 User joining family with code:", familyCode)
+        
+        // Find family by code
+        const usersRef = collection(db, "users")
+        const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
+        const querySnapshot = await getDocs(q)
+
+        if (querySnapshot.empty) {
+          setError("Invalid family code. Please check and try again.")
+          setLoading(false)
+          return
+        }
+
+        const familyDoc = querySnapshot.docs[0]
+        const familyData = familyDoc.data()
+
+        console.log("📋 Found family:", familyData.dogName, familyData.familyCode)
+
+        // Add user to family members list
+        const newMember = { name: displayName, email: user.email }
+        await updateDoc(doc(db, "users", familyDoc.id), {
+          familyMembers: arrayUnion(newMember)
+        })
+
+        // Create user's own document with family data
+        await setDoc(userDocRef, {
+          name: displayName,
+          email: user.email,
+          dogName: familyData.dogName,
+          familyMembers: [...(familyData.familyMembers || []), newMember],
+          familyCode: familyData.familyCode,
+          photoUrl: familyData.photoUrl,
+          createdAt: new Date(),
+        })
+
+        console.log("✅ Successfully joined family!")
         onLogin(loggedInUser)
         return
       }
 
       if (isSignup) {
         console.log("🆕 Creating new family")
+        
+        const familyCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase()
 
         const userData = {
           name: displayName,
           email: user.email,
           dogName: dogName.trim(),
           familyMembers: [{ name: displayName, email: user.email }],
+          familyCode: familyCodeGenerated,
           createdAt: new Date(),
         }
 
         await setDoc(userDocRef, userData)
-        console.log("✅ New family created")
+        console.log("✅ New family created with code:", familyCodeGenerated)
         onLogin(loggedInUser)
         return
       }
 
+      // Regular login - search for existing family
       console.log("🔍 Regular login - searching for existing family")
       const familyDoc = await findUserInFamily(user.email, db)
       
@@ -219,46 +246,106 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         console.log("🎉 Found existing family! Joining automatically")
         console.log("Family details:", {
           dogName: familyData.dogName,
+          familyCode: familyData.familyCode,
           members: familyData.familyMembers
         })
         
+        // Create user document with existing family data
         await setDoc(userDocRef, {
           name: displayName,
           email: user.email,
           dogName: familyData.dogName,
           familyMembers: familyData.familyMembers,
+          familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
         })
         
         onLogin(loggedInUser)
       } else {
-        console.log("❓ No family found - user needs to sign up or be invited")
-        toast({
-          title: "No Family Found",
-          description: "No family found for your email. Please sign up to create a new family or ask a family member to add you first.",
-          variant: "destructive",
-        })
+        console.log("❓ No family found - showing join form")
+        setShowJoinForm(true)
+        setLoading(false)
       }
 
     } catch (err: any) {
       console.error("❌ Login error:", err)
       if (err.code === "auth/unauthorized-domain") {
-        toast({
-          title: "Browser Issue",
-          description: "Please use a different browser or enable third-party cookies.",
-          variant: "destructive",
-        })
+        setError("Please use a different browser or enable third-party cookies.")
       } else {
-        toast({
-          title: "Login Failed",
-          description: err.message || "Failed to log in. Please try again.",
-          variant: "destructive",
-        })
+        setError(err.message || "Failed to log in. Please try again.")
       }
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleBackToLogin = () => {
+    setShowJoinForm(false)
+    setError("")
+    setName("")
+    setFamilyCode("")
+  }
+
+  // Show join form if user needs to join a family
+  if (showJoinForm) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4">
+              <Image src="/images/berry-logo.png" alt="Berry" width={200} height={60} />
+            </div>
+            <div className="flex items-center gap-2 mb-4">
+              <Button variant="ghost" size="sm" onClick={handleBackToLogin}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
+            </div>
+            <CardTitle className="text-2xl font-bold">Join a Family</CardTitle>
+            <CardDescription>Enter the family code to join an existing family</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="joinName">Your Name</Label>
+                <Input
+                  id="joinName"
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="familyCode">Family Code</Label>
+                <Input
+                  id="familyCode"
+                  placeholder="Enter the 6-digit family code"
+                  value={familyCode}
+                  onChange={(e) => setFamilyCode(e.target.value.toUpperCase())}
+                  className="font-mono"
+                  maxLength={6}
+                />
+              </div>
+
+              <Button onClick={() => handleGoogleLogin(true, false)} className="w-full h-12" disabled={loading}>
+                {loading ? "Joining..." : "Join Family"}
+              </Button>
+
+              {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-xs text-blue-700 text-center">
+                  💡 Ask your family member for the 6-digit code<br/>
+                  It looks like: <strong>AU5Z23</strong>
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -276,12 +363,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
               <p className="text-gray-600">Initializing app...</p>
-              {error && (
-                <Alert variant="destructive" className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+              {error && <p className="text-red-500 mt-4">{error}</p>}
             </div>
           ) : (
             <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
@@ -292,20 +374,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
               <TabsContent value="login">
                 <div className="space-y-4">
-                  <Button onClick={() => handleGoogleLogin(false)} className="w-full h-12" disabled={loading}>
+                  <Button onClick={() => handleGoogleLogin(false, false)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
                     {loading ? "Logging in..." : "Log in with Google"}
                   </Button>
 
-                  {error && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
+                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
-                    Will automatically find your family if you have been invited
+                    Will automatically find your family or guide you to join one
                   </p>
                 </div>
               </TabsContent>
@@ -313,38 +390,31 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               <TabsContent value="signup">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Your Name *</Label>
+                    <Label htmlFor="name">Your Name</Label>
                     <Input
                       id="name"
                       placeholder="Enter your name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="dogName">Your Dog Name *</Label>
+                    <Label htmlFor="dogName">Your Dog's Name</Label>
                     <Input
                       id="dogName"
-                      placeholder="Enter your dog name"
+                      placeholder="Enter your dog's name"
                       value={dogName}
                       onChange={(e) => setDogName(e.target.value)}
-                      required
                     />
                   </div>
 
-                  <Button onClick={() => handleGoogleLogin(true)} className="w-full h-12" disabled={loading}>
+                  <Button onClick={() => handleGoogleLogin(false, true)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
                     {loading ? "Signing up..." : "Sign up with Google"}
                   </Button>
 
-                  {error && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
+                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
                     Creates a new family account for your dog
@@ -355,7 +425,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           )}
         </CardContent>
       </Card>
-      <Toaster />
     </div>
   )
 }
