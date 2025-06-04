@@ -8,9 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, AlertCircle } from "lucide-react"
 import Image from "next/image"
 import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
+import {
+  Alert,
+  AlertDescription,
+} from "@/components/ui/alert"
 
 interface User {
   id: string
@@ -32,6 +36,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
   const [showJoinForm, setShowJoinForm] = useState(false)
+  const [nameError, setNameError] = useState("")
+  const [dogNameError, setDogNameError] = useState("")
+  const [familyCodeError, setFamilyCodeError] = useState("")
 
   useEffect(() => {
     const checkFirebase = async () => {
@@ -59,6 +66,47 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     } catch (error) {
       console.error("Error setting persistence:", error)
     }
+  }
+
+  const clearValidationErrors = () => {
+    setNameError("")
+    setDogNameError("")
+    setFamilyCodeError("")
+    setError("")
+  }
+
+  const validateSignupForm = () => {
+    let hasErrors = false
+    clearValidationErrors()
+
+    if (!name.trim()) {
+      setNameError("Name is required")
+      hasErrors = true
+    }
+
+    if (!dogName.trim()) {
+      setDogNameError("Dog's name is required")
+      hasErrors = true
+    }
+
+    return !hasErrors
+  }
+
+  const validateJoinForm = () => {
+    let hasErrors = false
+    clearValidationErrors()
+
+    if (!name.trim()) {
+      setNameError("Name is required")
+      hasErrors = true
+    }
+
+    if (!familyCode.trim()) {
+      setFamilyCodeError("Family code is required")
+      hasErrors = true
+    }
+
+    return !hasErrors
   }
 
   const findUserInFamily = async (userEmail: string, db: any) => {
@@ -121,26 +169,19 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       return
     }
 
-    setError("")
+    // Clear previous errors
+    clearValidationErrors()
+
+    // Validate forms based on action
+    if (isSignup && !validateSignupForm()) {
+      return
+    }
+
+    if (isJoining && !validateJoinForm()) {
+      return
+    }
+
     setLoading(true)
-
-    if (isJoining && !familyCode) {
-      setError("Please enter a family code")
-      setLoading(false)
-      return
-    }
-
-    if ((isJoining || isSignup) && !name.trim()) {
-      setError("Please enter your name")
-      setLoading(false)
-      return
-    }
-
-    if (isSignup && !dogName.trim()) {
-      setError("Please enter your dog's name")
-      setLoading(false)
-      return
-    }
 
     try {
       const auth: any = await getAuth()
@@ -185,7 +226,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         const querySnapshot = await getDocs(q)
 
         if (querySnapshot.empty) {
-          setError("Invalid family code. Please check and try again.")
+          setFamilyCodeError("Invalid family code. Please check and try again.")
           setLoading(false)
           return
         }
@@ -282,7 +323,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   const handleBackToLogin = () => {
     setShowJoinForm(false)
-    setError("")
+    clearValidationErrors()
     setName("")
     setFamilyCode("")
   }
@@ -308,32 +349,58 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           <CardContent>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="joinName">Your Name</Label>
+                <Label htmlFor="joinName">Your Name *</Label>
                 <Input
                   id="joinName"
                   placeholder="Enter your name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value)
+                    if (nameError) setNameError("")
+                  }}
+                  className={nameError ? "border-red-500" : ""}
+                  required
                 />
+                {nameError && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">{nameError}</AlertDescription>
+                  </Alert>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="familyCode">Family Code</Label>
+                <Label htmlFor="familyCode">Family Code *</Label>
                 <Input
                   id="familyCode"
                   placeholder="Enter the 6-digit family code"
                   value={familyCode}
-                  onChange={(e) => setFamilyCode(e.target.value.toUpperCase())}
-                  className="font-mono"
+                  onChange={(e) => {
+                    setFamilyCode(e.target.value.toUpperCase())
+                    if (familyCodeError) setFamilyCodeError("")
+                  }}
+                  className={`font-mono ${familyCodeError ? "border-red-500" : ""}`}
                   maxLength={6}
+                  required
                 />
+                {familyCodeError && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="text-sm">{familyCodeError}</AlertDescription>
+                  </Alert>
+                )}
               </div>
 
               <Button onClick={() => handleGoogleLogin(true, false)} className="w-full h-12" disabled={loading}>
                 {loading ? "Joining..." : "Join Family"}
               </Button>
 
-              {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-xs text-blue-700 text-center">
@@ -363,7 +430,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
               <p className="text-gray-600">Initializing app...</p>
-              {error && <p className="text-red-500 mt-4">{error}</p>}
+              {error && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
             </div>
           ) : (
             <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
@@ -379,7 +451,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     {loading ? "Logging in..." : "Log in with Google"}
                   </Button>
 
-                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
                     Will automatically find your family or guide you to join one
@@ -390,23 +467,45 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               <TabsContent value="signup">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Your Name</Label>
+                    <Label htmlFor="name">Your Name *</Label>
                     <Input
                       id="name"
                       placeholder="Enter your name"
                       value={name}
-                      onChange={(e) => setName(e.target.value)}
+                      onChange={(e) => {
+                        setName(e.target.value)
+                        if (nameError) setNameError("")
+                      }}
+                      className={nameError ? "border-red-500" : ""}
+                      required
                     />
+                    {nameError && (
+                      <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-sm">{nameError}</AlertDescription>
+                      </Alert>
+                    )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="dogName">Your Dog's Name</Label>
+                    <Label htmlFor="dogName">Your Dog's Name *</Label>
                     <Input
                       id="dogName"
                       placeholder="Enter your dog's name"
                       value={dogName}
-                      onChange={(e) => setDogName(e.target.value)}
+                      onChange={(e) => {
+                        setDogName(e.target.value)
+                        if (dogNameError) setDogNameError("")
+                      }}
+                      className={dogNameError ? "border-red-500" : ""}
+                      required
                     />
+                    {dogNameError && (
+                      <Alert variant="destructive" className="py-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-sm">{dogNameError}</AlertDescription>
+                      </Alert>
+                    )}
                   </div>
 
                   <Button onClick={() => handleGoogleLogin(false, true)} className="w-full h-12" disabled={loading}>
@@ -414,7 +513,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     {loading ? "Signing up..." : "Sign up with Google"}
                   </Button>
 
-                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
                     Creates a new family account for your dog
