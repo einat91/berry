@@ -80,10 +80,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [addingMember, setAddingMember] = useState(false)
   const [deletingEntry, setDeletingEntry] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [swipedEntry, setSwipedEntry] = useState<string | null>(null)
-  const [startX, setStartX] = useState<number>(0)
-  const [currentX, setCurrentX] = useState<number>(0)
-  const [isDragging, setIsDragging] = useState<boolean>(false)
+  const [swipedMember, setSwipedMember] = useState<string | null>(null)
+  const [startXMember, setStartXMember] = useState<number>(0)
+  const [currentXMember, setCurrentXMember] = useState<number>(0)
+  const [isDraggingMember, setIsDraggingMember] = useState<boolean>(false)
+  const [removingMember, setRemovingMember] = useState<string | null>(null)
   const { toast } = useToast()
   const [amount, setAmount] = useState("")
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
@@ -140,33 +141,24 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        // Start fresh - current user first (name only, no email shown)
-        const currentUser = { 
-          name: user.name
-        }
+        // Start with current user from login (ignore database entries completely)
+        const currentUser = { name: user.name }
         
-        // Get all family members and filter out ANY reference to current user
+        // Get other family members (exclude current user completely)
         let otherMembers = []
         if (userData.familyMembers && Array.isArray(userData.familyMembers)) {
           otherMembers = userData.familyMembers.filter((member: any) => {
-            // Filter out current user by email (if both have emails) - case insensitive
-            if (typeof member === 'object' && member.email && user.email && 
-                member.email.toLowerCase() === user.email.toLowerCase()) {
+            // Skip current user by email match
+            if (typeof member === 'object' && member.email === user.email) {
               return false
             }
-            // Filter out current user by name - case insensitive
-            if (typeof member === 'string' && member.toLowerCase() === user.name.toLowerCase()) {
+            // Skip current user by name match  
+            const memberName = typeof member === 'string' ? member : member?.name
+            if (memberName === user.name) {
               return false
             }
-            // Filter out if it's an object with the same name as current user - case insensitive
-            if (typeof member === 'object' && member.name && user.name &&
-                member.name.toLowerCase() === user.name.toLowerCase()) {
-              return false
-            }
-            // Keep all others
             return true
           }).map((member: any) => {
-            // Convert any remaining strings to objects
             if (typeof member === 'string') {
               return { name: member }
             }
@@ -174,10 +166,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           })
         }
         
-        // Final list: current user first, then others
-        const finalMembers = [currentUser, ...otherMembers]
-        
-        setFamilyMembers(finalMembers)
+        setFamilyMembers([currentUser, ...otherMembers])
       } else {
         toast({
           title: "Setup Required",
@@ -221,6 +210,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         timestamp: doc.data().timestamp.toDate(),
       })) as Entry[]
 
+      // Sort by timestamp - newest first (most recent at top)
       loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
@@ -392,7 +382,64 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
-  const addFamilyMember = async () => {
+  const handleMemberTouchStart = (e: React.TouchEvent, memberKey: string) => {
+    setStartXMember(e.touches[0].clientX)
+    setCurrentXMember(e.touches[0].clientX)
+    setIsDraggingMember(true)
+  }
+
+  const handleMemberTouchMove = (e: React.TouchEvent, memberKey: string) => {
+    if (!isDraggingMember) return
+    
+    const touch = e.touches[0]
+    setCurrentXMember(touch.clientX)
+    
+    const deltaX = startXMember - touch.clientX
+    
+    if (deltaX > 20) {
+      setSwipedMember(memberKey)
+    } else if (deltaX < -10) {
+      setSwipedMember(null)
+    }
+  }
+
+  const handleMemberTouchEnd = () => {
+    setIsDraggingMember(false)
+    const deltaX = startXMember - currentXMember
+    
+    if (deltaX < 60) {
+      setSwipedMember(null)
+    }
+  }
+
+  const handleMemberMouseDown = (e: React.MouseEvent, memberKey: string) => {
+    setStartXMember(e.clientX)
+    setCurrentXMember(e.clientX)
+    setIsDraggingMember(true)
+  }
+
+  const handleMemberMouseMove = (e: React.MouseEvent, memberKey: string) => {
+    if (!isDraggingMember) return
+    
+    setCurrentXMember(e.clientX)
+    
+    const deltaX = startXMember - e.clientX
+    
+    if (deltaX > 20) {
+      setSwipedMember(memberKey)
+    } else if (deltaX < -10) {
+      setSwipedMember(null)
+    }
+  }
+
+  const handleMemberMouseUp = () => {
+    setIsDraggingMember(false)
+    const deltaX = startXMember - currentXMember
+    
+    if (deltaX < 60) {
+      setSwipedMember(null)
+    }
+  }
     if (!newMemberName.trim()) return
 
     try {
@@ -486,21 +533,62 @@ export function DashboardPage({ user }: DashboardPageProps) {
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium">Current Family Members</h3>
                     <div className="space-y-2">
-                      {familyMembers.map((member, index) => (
-                        <div key={`${member.name}-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-gray-500" />
-                            <div>
-                              <span className="font-medium">{member.name}</span>
-                              {member.email && member.name !== user.name && (
-                                <div className="text-xs text-gray-500">
-                                  {member.email}
+                      {familyMembers.map((member, index) => {
+                        const memberKey = `${member.name}-${index}`
+                        return (
+                          <div key={memberKey} className="relative overflow-hidden rounded-md bg-gray-50">
+                            {/* Main content */}
+                            <div 
+                              className={`flex items-center justify-between p-2 bg-gray-50 rounded-md transition-transform duration-200 ease-out ${
+                                swipedMember === memberKey ? 'transform -translate-x-20' : 'transform translate-x-0'
+                              }`}
+                              onTouchStart={(e) => handleMemberTouchStart(e, memberKey)}
+                              onTouchMove={(e) => handleMemberTouchMove(e, memberKey)}
+                              onTouchEnd={handleMemberTouchEnd}
+                              onMouseDown={(e) => handleMemberMouseDown(e, memberKey)}
+                              onMouseMove={(e) => handleMemberMouseMove(e, memberKey)}
+                              onMouseUp={handleMemberMouseUp}
+                              onMouseLeave={() => setIsDraggingMember(false)}
+                              style={{ cursor: isDraggingMember ? 'grabbing' : 'grab' }}
+                            >
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 text-gray-500" />
+                                <div>
+                                  <span className="font-medium text-sm">{member.name}</span>
+                                  {member.email && member.name !== user.name && (
+                                    <div className="text-xs text-gray-500">
+                                      {member.email}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
+                              </div>
                             </div>
+                            
+                            {/* Delete button - revealed on swipe */}
+                            {member.name !== user.name && (
+                              <div 
+                                className={`absolute right-0 top-0 h-full w-20 bg-red-500 flex items-center justify-center transition-transform duration-200 ease-out ${
+                                  swipedMember === memberKey ? 'transform translate-x-0' : 'transform translate-x-full'
+                                }`}
+                              >
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeFamilyMember(member)}
+                                  disabled={removingMember === memberKey}
+                                  className="h-12 w-12 rounded-full text-white hover:bg-red-600 hover:text-white"
+                                >
+                                  {removingMember === memberKey ? (
+                                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                                  ) : (
+                                    <Trash2 className="h-5 w-5" />
+                                  )}
+                                </Button>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                   <div className="space-y-3">
