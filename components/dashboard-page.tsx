@@ -1001,7 +1001,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
+                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
                   </div>
                   
