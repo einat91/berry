@@ -57,7 +57,6 @@ interface FamilyMember {
   name: string
   email?: string
   userId?: string
-  fullName?: string
 }
 
 interface DashboardPageProps {
@@ -82,13 +81,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [deletingEntry, setDeletingEntry] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [swipedMember, setSwipedMember] = useState<string | null>(null)
-  const [swipedEntry, setSwipedEntry] = useState<string | null>(null)
   const [startXMember, setStartXMember] = useState<number>(0)
   const [currentXMember, setCurrentXMember] = useState<number>(0)
   const [isDraggingMember, setIsDraggingMember] = useState<boolean>(false)
-  const [startXEntry, setStartXEntry] = useState<number>(0)
-  const [currentXEntry, setCurrentXEntry] = useState<number>(0)
-  const [isDraggingEntry, setIsDraggingEntry] = useState<boolean>(false)
   const [removingMember, setRemovingMember] = useState<string | null>(null)
   const { toast } = useToast()
   const [amount, setAmount] = useState("")
@@ -123,45 +118,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userDocSnap.exists()) {
         userData = userDocSnap.data()
       } else {
-        // Try to find the user in other families
         const usersRef = collection(db, "users")
-        const allUsersSnapshot = await getDocs(usersRef)
-        
-        let foundFamily = false
-        for (const docSnapshot of allUsersSnapshot.docs) {
-          const docData = docSnapshot.data()
-          if (docData.familyMembers && Array.isArray(docData.familyMembers)) {
-            // Check if user is in this family by email or name
-            const isInFamily = docData.familyMembers.some((member: any) => {
-              if (typeof member === 'string') {
-                return member === user.name || member === user.email
-              }
-              return member.email === user.email || member.name === user.name
-            })
-            
-            if (isInFamily) {
-              userData = docData
-              foundFamily = true
-              
-              // Create user document with family data
-              const { setDoc } = await import("firebase/firestore")
-              await setDoc(userDocRef, {
-                name: user.name,
-                email: user.email,
-                dogName: docData.dogName,
-                familyMembers: docData.familyMembers,
-                photoUrl: docData.photoUrl,
-                createdAt: new Date(),
-              })
-              break
-            }
-          }
-        }
-        
-        if (!foundFamily) {
-          console.log("No family found for user:", user.email)
-        }
-      }(q)
+        const q = query(usersRef, where("familyMembers", "array-contains", user.name))
+        const querySnapshot = await getDocs(q)
 
         if (!querySnapshot.empty) {
           const familyDoc = querySnapshot.docs[0]
@@ -182,13 +141,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        // Start with current user from login (show only first name for display)
-        const firstName = user.name.split(' ')[0]
-        const currentUser = { 
-          name: firstName,
-          email: user.email,
-          fullName: user.name // Keep full name for matching
-        }
+        // Start with current user from login (ignore database entries completely)
+        const currentUser = { name: user.name }
         
         // Get other family members (exclude current user completely)
         let otherMembers = []
@@ -198,9 +152,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
             if (typeof member === 'object' && member.email === user.email) {
               return false
             }
-            // Skip current user by name match (check both full name and member name)
+            // Skip current user by name match  
             const memberName = typeof member === 'string' ? member : member?.name
-            if (memberName === user.name || memberName === firstName) {
+            if (memberName === user.name) {
               return false
             }
             return true
@@ -260,7 +214,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
-      console.log(`Loaded ${loadedEntries.length} entries for ${format(selectedDate, "yyyy-MM-dd")}`)
     } catch (error) {
       console.error("Error loading entries:", error)
       toast({
@@ -429,7 +382,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
-  // Member swipe handlers
   const handleMemberTouchStart = (e: React.TouchEvent, memberKey: string) => {
     setStartXMember(e.touches[0].clientX)
     setCurrentXMember(e.touches[0].clientX)
@@ -488,74 +440,12 @@ export function DashboardPage({ user }: DashboardPageProps) {
       setSwipedMember(null)
     }
   }
-
-  // Entry swipe handlers
-  const handleEntryTouchStart = (e: React.TouchEvent, entryId: string) => {
-    setStartXEntry(e.touches[0].clientX)
-    setCurrentXEntry(e.touches[0].clientX)
-    setIsDraggingEntry(true)
-  }
-
-  const handleEntryTouchMove = (e: React.TouchEvent, entryId: string) => {
-    if (!isDraggingEntry) return
-    
-    const touch = e.touches[0]
-    setCurrentXEntry(touch.clientX)
-    
-    const deltaX = startXEntry - touch.clientX
-    
-    if (deltaX > 20) {
-      setSwipedEntry(entryId)
-    } else if (deltaX < -10) {
-      setSwipedEntry(null)
-    }
-  }
-
-  const handleEntryTouchEnd = () => {
-    setIsDraggingEntry(false)
-    const deltaX = startXEntry - currentXEntry
-    
-    if (deltaX < 60) {
-      setSwipedEntry(null)
-    }
-  }
-
-  const handleEntryMouseDown = (e: React.MouseEvent, entryId: string) => {
-    setStartXEntry(e.clientX)
-    setCurrentXEntry(e.clientX)
-    setIsDraggingEntry(true)
-  }
-
-  const handleEntryMouseMove = (e: React.MouseEvent, entryId: string) => {
-    if (!isDraggingEntry) return
-    
-    setCurrentXEntry(e.clientX)
-    
-    const deltaX = startXEntry - e.clientX
-    
-    if (deltaX > 20) {
-      setSwipedEntry(entryId)
-    } else if (deltaX < -10) {
-      setSwipedEntry(null)
-    }
-  }
-
-  const handleEntryMouseUp = () => {
-    setIsDraggingEntry(false)
-    const deltaX = startXEntry - currentXEntry
-    
-    if (deltaX < 60) {
-      setSwipedEntry(null)
-    }
-  }
-
-  const addFamilyMember = async () => {
     if (!newMemberName.trim()) return
 
     try {
       setAddingMember(true)
       const db: any = await getDb()
-      const { doc, updateDoc, arrayUnion, getDoc } = await import("firebase/firestore")
+      const { doc, updateDoc, arrayUnion } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
       const newMember = {
@@ -563,111 +453,22 @@ export function DashboardPage({ user }: DashboardPageProps) {
         ...(newMemberEmail.trim() && { email: newMemberEmail.trim() })
       }
 
-      // Update current user's document
       await updateDoc(userDocRef, {
         familyMembers: arrayUnion(newMember),
       })
-      
-      // If there's a familyDocId, also update the original family document
-      const userDoc = await getDoc(userDocRef)
-      if (userDoc.exists() && userDoc.data().familyDocId) {
-        const familyDocRef = doc(db, "users", userDoc.data().familyDocId)
-        await updateDoc(familyDocRef, {
-          familyMembers: arrayUnion(newMember),
-        })
-        console.log("Updated original family document with new member")
-      }
 
       setFamilyMembers((prev) => [...prev, newMember])
       setNewMemberName("")
       setNewMemberEmail("")
-      setShowFamilyDialog(false)
 
       toast({
         title: "Family Member Added",
-        description: `${newMemberName.trim()} has been added to your family.${newMemberEmail.trim() ? ' They can now log in with their email.' : ''}`,
+        description: `${newMemberName.trim()} has been added to your family.`,
       })
     } catch (error) {
       console.error("Error adding family member:", error)
-      toast({
-        title: "Failed to Add Member",
-        description: "Could not add family member. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setAddingMember(false)
-    }
-  }
-
-  const removeFamilyMember = async (member: FamilyMember) => {
-    const memberKey = member.name + "-" + familyMembers.indexOf(member)
-    setRemovingMember(memberKey)
-    
-    try {
-      const db: any = await getDb()
-      const { doc, updateDoc, arrayRemove, getDoc } = await import("firebase/firestore")
-
-      const userDocRef = doc(db, "users", user.id)
-      
-      // Update current user's document
-      await updateDoc(userDocRef, {
-        familyMembers: arrayRemove(member),
-      })
-      
-      // If there's a familyDocId, also update the original family document
-      const userDoc = await getDoc(userDocRef)
-      if (userDoc.exists() && userDoc.data().familyDocId) {
-        const familyDocRef = doc(db, "users", userDoc.data().familyDocId)
-        await updateDoc(familyDocRef, {
-          familyMembers: arrayRemove(member),
-        })
-        console.log("Updated original family document - removed member")
-      }
-
-      setFamilyMembers((prev) => prev.filter((m) => m.name !== member.name))
-      setSwipedMember(null)
-
-      toast({
-        title: "Member Removed",
-        description: `${member.name} has been removed from your family.`,
-      })
-    } catch (error) {
-      console.error("Error removing family member:", error)
-      toast({
-        title: "Failed to Remove Member",
-        description: "Could not remove family member. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setRemovingMember(null)
-    }
-  }
-
-  const deleteEntry = async (entryId: string) => {
-    setDeletingEntry(entryId)
-    
-    try {
-      const db: any = await getDb()
-      const { doc, deleteDoc } = await import("firebase/firestore")
-
-      await deleteDoc(doc(db, "entries", entryId))
-      
-      setEntries((prev) => prev.filter((e) => e.id !== entryId))
-      setSwipedEntry(null)
-
-      toast({
-        title: "Activity Deleted",
-        description: "The activity has been removed successfully.",
-      })
-    } catch (error) {
-      console.error("Error deleting entry:", error)
-      toast({
-        title: "Failed to Delete",
-        description: "Could not delete the activity. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setDeletingEntry(null)
     }
   }
 
@@ -732,72 +533,41 @@ export function DashboardPage({ user }: DashboardPageProps) {
                   <div className="space-y-2">
                     <h3 className="text-sm font-medium">Current Family Members</h3>
                     <div className="space-y-2">
-                      {familyMembers.map((member, index) => {
-                        const memberKey = member.name + "-" + index
-                        const isCurrentUser = index === 0 // First member is always current user
-                        
-                        return (
-                          <div key={memberKey} className="relative overflow-hidden rounded-md bg-gray-50">
-                            <div 
-                              className={`flex items-center justify-between p-2 bg-gray-50 rounded-md transition-transform duration-200 ease-out ${
-                                swipedMember === memberKey ? 'transform -translate-x-20' : 'transform translate-x-0'
-                              }`}
-                              onTouchStart={(e) => !isCurrentUser && handleMemberTouchStart(e, memberKey)}
-                              onTouchMove={(e) => !isCurrentUser && handleMemberTouchMove(e, memberKey)}
-                              onTouchEnd={() => !isCurrentUser && handleMemberTouchEnd()}
-                              onMouseDown={(e) => !isCurrentUser && handleMemberMouseDown(e, memberKey)}
-                              onMouseMove={(e) => !isCurrentUser && handleMemberMouseMove(e, memberKey)}
-                              onMouseUp={() => !isCurrentUser && handleMemberMouseUp()}
-                              onMouseLeave={() => setIsDraggingMember(false)}
-                              style={{ cursor: !isCurrentUser && isDraggingMember ? 'grabbing' : !isCurrentUser ? 'grab' : 'default' }}
-                            >
-                              <div className="flex items-center gap-2">
-                                <User className="h-4 w-4 text-gray-500" />
-                                <div>
-                                  <span className="font-medium text-sm">{member.name}</span>
-                                  {member.email && (
-                                    <div className="text-xs text-gray-500">
-                                      {member.email}
-                                    </div>
-                                  )}
+                      {familyMembers.map((member, index) => (
+                        <div key={member.name + index} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-gray-500" />
+                            <div>
+                              <span className="font-medium text-sm">{member.name}</span>
+                              {member.email && member.name !== user.name && (
+                                <div className="text-xs text-gray-500">
+                                  {member.email}
                                 </div>
-                              </div>
+                              )}
                             </div>
-                            
-                            {!isCurrentUser && (
-                              <div 
-                                className={`absolute right-0 top-0 h-full w-20 bg-red-500 flex items-center justify-center transition-transform duration-200 ease-out ${
-                                  swipedMember === memberKey ? 'transform translate-x-0' : 'transform translate-x-full'
-                                }`}
-                              >
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => removeFamilyMember(member)}
-                                  disabled={removingMember === memberKey}
-                                  className="h-12 w-12 rounded-full text-white hover:bg-red-600 hover:text-white"
-                                >
-                                  {removingMember === memberKey ? (
-                                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                                  ) : (
-                                    <Trash2 className="h-5 w-5" />
-                                  )}
-                                </Button>
-                              </div>
-                            )}
                           </div>
-                        )
-                      })}
+                          {member.name !== user.name && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeFamilyMember(member)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <X className="h-4 w-4 text-gray-500" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                   <div className="space-y-3">
                     <h3 className="text-sm font-medium">Add New Member</h3>
                     <div className="space-y-2">
                       <div>
-                        <Label htmlFor="memberName">Second name *</Label>
+                        <Label htmlFor="memberName">Name *</Label>
                         <Input
                           id="memberName"
-                          placeholder="Enter second name"
+                          placeholder="Enter name"
                           value={newMemberName}
                           onChange={(e) => setNewMemberName(e.target.value)}
                         />
@@ -1009,54 +779,20 @@ export function DashboardPage({ user }: DashboardPageProps) {
           ) : (
             <div className="space-y-3">
               {entries.map((entry) => (
-                <div key={entry.id} className="relative overflow-hidden rounded-lg">
-                  <div 
-                    className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ease-out ${
-                      swipedEntry === entry.id ? 'transform -translate-x-20' : 'transform translate-x-0'
-                    }`}
-                    onTouchStart={(e) => handleEntryTouchStart(e, entry.id)}
-                    onTouchMove={(e) => handleEntryTouchMove(e, entry.id)}
-                    onTouchEnd={handleEntryTouchEnd}
-                    onMouseDown={(e) => handleEntryMouseDown(e, entry.id)}
-                    onMouseMove={(e) => handleEntryMouseMove(e, entry.id)}
-                    onMouseUp={handleEntryMouseUp}
-                    onMouseLeave={() => setIsDraggingEntry(false)}
-                    style={{ cursor: isDraggingEntry ? 'grabbing' : 'grab' }}
-                  >
-                    <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
-                      {getActivityIcon(entry.type)}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm text-gray-600">
-                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
-                      </div>
-                      <div className="text-xs text-gray-600">By {entry.addedBy}</div>
-                      {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
-                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
-                    </div>
+                <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
+                    {getActivityIcon(entry.type)}
                   </div>
-                  
-                  <div 
-                    className={`absolute right-0 top-0 h-full w-20 bg-red-500 flex items-center justify-center transition-transform duration-200 ease-out ${
-                      swipedEntry === entry.id ? 'transform translate-x-0' : 'transform translate-x-full'
-                    }`}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteEntry(entry.id)}
-                      disabled={deletingEntry === entry.id}
-                      className="h-12 w-12 rounded-full text-white hover:bg-red-600 hover:text-white"
-                    >
-                      {deletingEntry === entry.id ? (
-                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                      ) : (
-                        <Trash2 className="h-5 w-5" />
-                      )}
-                    </Button>
+                  <div className="flex-1">
+                    <div className="text-sm text-gray-600">
+                      {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                    </div>
+                    <div className="text-xs text-gray-600">By {entry.addedBy}</div>
+                    {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
+                    {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                   </div>
                 </div>
               ))}
