@@ -20,6 +20,8 @@ import {
   UserPlus,
   X,
   AlertCircle,
+  Trash2,
+  RefreshCw,
 } from "lucide-react"
 import { format, addDays, subDays, isToday } from "date-fns"
 import Image from "next/image"
@@ -34,6 +36,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Label } from "@/components/ui/label"
 
 interface UserType {
@@ -81,6 +94,12 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [newMemberName, setNewMemberName] = useState("")
   const [newMemberEmail, setNewMemberEmail] = useState("")
   const [addingMember, setAddingMember] = useState(false)
+  const [deletingEntry, setDeletingEntry] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [swipedEntry, setSwipedEntry] = useState<string | null>(null)
+  const [startX, setStartX] = useState<number>(0)
+  const [currentX, setCurrentX] = useState<number>(0)
+  const [isDragging, setIsDragging] = useState<boolean>(false)
   const { toast } = useToast()
   const [amount, setAmount] = useState("")
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
@@ -213,6 +232,119 @@ export function DashboardPage({ user }: DashboardPageProps) {
       setEntries([])
     } finally {
       setLoadingEntries(false)
+    }
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await loadEntries()
+      toast({
+        title: "Refreshed",
+        description: "Activities have been refreshed successfully!",
+      })
+    } catch (error) {
+      toast({
+        title: "Refresh Failed",
+        description: "Could not refresh activities. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const deleteEntry = async (entryId: string) => {
+    try {
+      setDeletingEntry(entryId)
+      const db: any = await getDb()
+      const { doc, deleteDoc } = await import("firebase/firestore")
+
+      const entryRef = doc(db, "entries", entryId)
+      await deleteDoc(entryRef)
+
+      // Remove from local state
+      setEntries((prevEntries) => prevEntries.filter((entry) => entry.id !== entryId))
+      
+      // Reset swipe state
+      setSwipedEntry(null)
+
+      toast({
+        title: "Activity Deleted",
+        description: "The activity has been deleted successfully.",
+      })
+    } catch (error) {
+      console.error("Error deleting entry:", error)
+      toast({
+        title: "Delete Failed",
+        description: "Could not delete the activity. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeletingEntry(null)
+    }
+  }
+
+  const handleTouchStart = (e: React.TouchEvent, entryId: string) => {
+    setStartX(e.touches[0].clientX)
+    setCurrentX(e.touches[0].clientX)
+    setIsDragging(true)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent, entryId: string) => {
+    if (!isDragging) return
+    
+    const touch = e.touches[0]
+    setCurrentX(touch.clientX)
+    
+    const deltaX = startX - touch.clientX
+    
+    // Only allow left swipe (positive deltaX)
+    if (deltaX > 20) {
+      setSwipedEntry(entryId)
+    } else if (deltaX < -10) {
+      setSwipedEntry(null)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setIsDragging(false)
+    const deltaX = startX - currentX
+    
+    // If swipe distance is less than threshold, close the swipe
+    if (deltaX < 60) {
+      setSwipedEntry(null)
+    }
+  }
+
+  const handleMouseDown = (e: React.MouseEvent, entryId: string) => {
+    setStartX(e.clientX)
+    setCurrentX(e.clientX)
+    setIsDragging(true)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent, entryId: string) => {
+    if (!isDragging) return
+    
+    setCurrentX(e.clientX)
+    
+    const deltaX = startX - e.clientX
+    
+    // Only allow left swipe (positive deltaX)
+    if (deltaX > 20) {
+      setSwipedEntry(entryId)
+    } else if (deltaX < -10) {
+      setSwipedEntry(null)
+    }
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+    const deltaX = startX - currentX
+    
+    // If swipe distance is less than threshold, close the swipe
+    if (deltaX < 60) {
+      setSwipedEntry(null)
     }
   }
 
@@ -548,10 +680,20 @@ export function DashboardPage({ user }: DashboardPageProps) {
               <Image src="/images/berry-logo.png" alt="Berry" width={150} height={50} />
             </button>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={refreshing || loadingEntries}
+              className="h-10 w-10"
+              title="Refresh activities"
+            >
+              <RefreshCw className={`h-5 w-5 text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
+            </Button>
             <Dialog open={showFamilyDialog} onOpenChange={setShowFamilyDialog}>
               <DialogTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="h-10 w-10">
                   <UserPlus className="h-5 w-5 text-gray-600" />
                 </Button>
               </DialogTrigger>
@@ -640,7 +782,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            <Button variant="ghost" size="icon" onClick={handleSignOut}>
+            <Button variant="ghost" size="icon" onClick={handleSignOut} className="h-10 w-10">
               <Image
                 src={user.avatar || "/placeholder.svg"}
                 alt={user.name}
@@ -829,20 +971,59 @@ export function DashboardPage({ user }: DashboardPageProps) {
           ) : (
             <div className="space-y-3">
               {entries.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
-                    {getActivityIcon(entry.type)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm text-gray-600">
-                      {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                <div 
+                  key={entry.id} 
+                  className="relative overflow-hidden rounded-lg bg-gray-50"
+                >
+                  {/* Main content */}
+                  <div 
+                    className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ease-out ${
+                      swipedEntry === entry.id ? 'transform -translate-x-20' : 'transform translate-x-0'
+                    }`}
+                    onTouchStart={(e) => handleTouchStart(e, entry.id)}
+                    onTouchMove={(e) => handleTouchMove(e, entry.id)}
+                    onTouchEnd={handleTouchEnd}
+                    onMouseDown={(e) => handleMouseDown(e, entry.id)}
+                    onMouseMove={(e) => handleMouseMove(e, entry.id)}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={() => setIsDragging(false)}
+                    style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+                  >
+                    <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
+                      {getActivityIcon(entry.type)}
                     </div>
-                    <div className="text-xs text-gray-600">By {entry.addedBy}</div>
-                    {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
-                    {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                    <div className="flex-1">
+                      <div className="text-sm text-gray-600">
+                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                      </div>
+                      <div className="text-xs text-gray-600">By {entry.addedBy}</div>
+                      {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
+                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
+                  
+                  {/* Delete button - revealed on swipe */}
+                  <div 
+                    className={`absolute right-0 top-0 h-full w-20 bg-red-500 flex items-center justify-center transition-transform duration-200 ease-out ${
+                      swipedEntry === entry.id ? 'transform translate-x-0' : 'transform translate-x-full'
+                    }`}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteEntry(entry.id)}
+                      disabled={deletingEntry === entry.id}
+                      className="h-12 w-12 rounded-full text-white hover:bg-red-600 hover:text-white"
+                    >
+                      {deletingEntry === entry.id ? (
+                        <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
+                      ) : (
+                        <Trash2 className="h-5 w-5" />
+                      )}
+                    </Button>
                   </div>
                 </div>
               ))}
