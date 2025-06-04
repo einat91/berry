@@ -12,6 +12,7 @@ import { AlertCircle } from "lucide-react"
 import Image from "next/image"
 import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
 import { useToast } from "@/hooks/use-toast"
+import { Toaster } from "@/components/ui/toaster"
 import {
   Alert,
   AlertDescription,
@@ -354,6 +355,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           )}
         </CardContent>
       </Card>
+      <Toaster />
     </div>
   )
 }
