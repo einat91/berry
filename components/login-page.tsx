@@ -31,6 +31,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
   const [showJoinForm, setShowJoinForm] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<string>("")
   const { toast } = useToast()
 
   useEffect(() => {
@@ -70,84 +71,118 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     try {
       const { collection, getDocs } = await import("firebase/firestore")
       
-      console.log("🔍 Starting family search for email:", userEmail)
+      console.log("🔍 ===== STARTING FAMILY SEARCH =====")
+      console.log("🔍 Original email from Google:", userEmail)
       
       if (!userEmail || typeof userEmail !== 'string') {
         console.log("❌ Invalid email provided:", userEmail)
+        setDebugInfo(`❌ Invalid email: ${userEmail}`)
         return null
       }
 
       // Normalize email for comparison (lowercase and trim)
       const normalizedSearchEmail = userEmail.toLowerCase().trim()
       console.log("🔍 Normalized search email:", normalizedSearchEmail)
+      setDebugInfo(`🔍 Looking for: ${normalizedSearchEmail}`)
       
       const usersRef = collection(db, "users")
       const querySnapshot = await getDocs(usersRef)
       
-      console.log("📂 Total documents found:", querySnapshot.docs.length)
+      console.log("📂 Total documents in database:", querySnapshot.docs.length)
+      
+      let debugLog = `📂 Found ${querySnapshot.docs.length} families in database\n\n`
       
       for (const doc of querySnapshot.docs) {
         try {
           const data = doc.data()
           
+          console.log("📄 Checking document:", doc.id)
+          debugLog += `📄 Document: ${doc.id}\n`
+          
           // Skip documents without required family data
           if (!data.dogName || !data.familyMembers || !Array.isArray(data.familyMembers)) {
-            console.log("⏭️ Skipping document - no family data:", doc.id)
+            console.log("⏭️ Skipping - no family data")
+            debugLog += "  ⏭️ Skipped - no family data\n\n"
             continue
           }
           
-          console.log("👨‍👩‍👧‍👦 Checking family:", {
-            docId: doc.id,
+          console.log("👨‍👩‍👧‍👦 Family found:", {
             dogName: data.dogName,
-            memberCount: data.familyMembers.length
+            memberCount: data.familyMembers.length,
+            members: data.familyMembers
           })
+          
+          debugLog += `  🐕 Dog: ${data.dogName}\n`
+          debugLog += `  👥 Members (${data.familyMembers.length}):\n`
           
           // Check each family member
           for (let i = 0; i < data.familyMembers.length; i++) {
             const member = data.familyMembers[i]
             
+            console.log(`   Member ${i}:`, member)
+            
             let memberEmail = null
+            let memberName = "Unknown"
             
             // Handle different member formats
             if (typeof member === 'string') {
               memberEmail = member
-            } else if (member && typeof member === 'object' && member.email) {
+              memberName = member
+            } else if (member && typeof member === 'object') {
               memberEmail = member.email
+              memberName = member.name || "No name"
             }
+            
+            debugLog += `    ${i + 1}. ${memberName}`
             
             if (memberEmail && typeof memberEmail === 'string') {
               // Normalize member email for comparison
               const normalizedMemberEmail = memberEmail.toLowerCase().trim()
               
-              console.log(`📧 Comparing emails:`)
-              console.log(`   Search: "${normalizedSearchEmail}"`)
-              console.log(`   Member: "${normalizedMemberEmail}"`)
-              console.log(`   Match: ${normalizedSearchEmail === normalizedMemberEmail}`)
+              debugLog += ` (${memberEmail})\n`
+              
+              console.log(`📧 EMAIL COMPARISON ${i}:`)
+              console.log(`   🔍 Searching for: "${normalizedSearchEmail}"`)
+              console.log(`   📝 Found in DB:   "${normalizedMemberEmail}"`)
+              console.log(`   ✅ Match?        ${normalizedSearchEmail === normalizedMemberEmail}`)
               
               if (normalizedSearchEmail === normalizedMemberEmail) {
-                console.log("✅ FAMILY MATCH FOUND!")
+                console.log("🎉 ===== FAMILY MATCH FOUND! =====")
                 console.log("Family details:", {
                   dogName: data.dogName,
                   memberCount: data.familyMembers.length,
-                  docId: doc.id
+                  docId: doc.id,
+                  matchedMember: member
                 })
+                
+                setDebugInfo(`🎉 MATCH FOUND!\n🐕 Dog: ${data.dogName}\n👤 Matched: ${memberName}\n📧 Email: ${memberEmail}`)
+                
                 return doc
               }
+            } else {
+              debugLog += ` (no email)\n`
             }
           }
+          
+          debugLog += "\n"
+          
         } catch (memberError) {
           console.error("❌ Error processing family document:", doc.id, memberError)
-          // Continue to next document instead of failing
+          debugLog += `  ❌ Error processing this family\n\n`
           continue
         }
       }
       
-      console.log("❌ No family found for email:", normalizedSearchEmail)
+      console.log("❌ ===== NO FAMILY FOUND =====")
+      console.log("Search email:", normalizedSearchEmail)
+      
+      setDebugInfo(debugLog + `\n❌ NO MATCH for: ${normalizedSearchEmail}`)
+      
       return null
       
     } catch (error) {
       console.error("❌ Critical error in family search:", error)
-      // Return null instead of throwing to prevent app crash
+      setDebugInfo(`❌ Search error: ${error.message}`)
       return null
     }
   }
@@ -200,6 +235,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
 
     setLoading(true)
+    setDebugInfo("🚀 Starting login...")
 
     try {
       console.log("🚀 Starting Google login process...")
@@ -219,11 +255,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         throw new Error("No user or email returned from Google login")
       }
 
-      console.log("✅ Google sign-in successful:", {
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName
-      })
+      console.log("✅ Google sign-in successful:")
+      console.log("   User ID:", user.uid)
+      console.log("   Email:", user.email)
+      console.log("   Display Name:", user.displayName)
+      
+      setDebugInfo(`✅ Google Login Success!\n📧 Email: ${user.email}\n👤 Name: ${user.displayName}`)
 
       const displayName = isSignup || isJoining ? name.trim() : (user.displayName || "Dog Parent")
 
@@ -251,6 +288,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       if (isJoining) {
         console.log("👥 User attempting to join existing family")
+        setDebugInfo(prev => prev + "\n\n👥 Attempting to join family...")
         
         // Find any existing family by searching for families
         const familyDoc = await findUserInFamily(user.email, db)
@@ -259,7 +297,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           console.log("❌ No family found for joining attempt")
           toast({
             title: "No Family Found",
-            description: "No family found for your email address. Please sign up to create a new family.",
+            description: "No family found for your email address. Check the debug info below or create a new family.",
             variant: "destructive",
           })
           setLoading(false)
@@ -341,6 +379,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       // Regular login - search for existing family
       console.log("🔍 Regular login - searching for existing family...")
+      setDebugInfo(prev => prev + "\n\n🔍 Searching families...")
+      
       try {
         const familyDoc = await findUserInFamily(user.email, db)
         
@@ -366,35 +406,35 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           onLogin(loggedInUser)
         } else {
           console.log("❓ No family found - showing join form")
-          console.log("🔄 Switching to join/create family flow...")
           
-          // CRITICAL: Always show the join form instead of exiting
+          // Show the join form with debug info
           setShowJoinForm(true)
           setLoading(false)
           
           toast({
-            title: "Family Setup Needed",
-            description: "We'll help you join an existing family or create a new one.",
+            title: "Family Not Found",
+            description: "Check the debug info below to see what happened.",
           })
         }
       } catch (searchError) {
         console.error("❌ Error searching for family:", searchError)
-        console.log("🔄 Family search failed - showing join form as fallback")
         
-        // CRITICAL: On any search error, show join form instead of crashing
+        setDebugInfo(prev => prev + `\n\n❌ Search Error: ${searchError.message}`)
         setShowJoinForm(true)
         setLoading(false)
         
         toast({
-          title: "Let's Get You Set Up",
-          description: "We'll help you join an existing family or create a new one.",
+          title: "Search Error",
+          description: "Error searching for families. Check debug info below.",
+          variant: "destructive",
         })
       }
 
     } catch (err: any) {
       console.error("❌ Critical login error:", err)
       
-      // CRITICAL: Never exit the app - always handle errors gracefully
+      setDebugInfo(prev => prev + `\n\n❌ Login Error: ${err.message}`)
+      
       if (err.code === "auth/unauthorized-domain") {
         toast({
           title: "Browser Issue",
@@ -408,12 +448,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           variant: "destructive",
         })
       } else {
-        // For any other error, show join form as fallback
-        console.log("🔄 Login error occurred - showing join form as safe fallback")
         setShowJoinForm(true)
         toast({
-          title: "Let's Try a Different Approach",
-          description: "We'll help you set up your account.",
+          title: "Login Error",
+          description: "Check debug info below for details.",
           variant: "destructive",
         })
       }
@@ -426,6 +464,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     console.log("🔙 Going back to login page")
     setShowJoinForm(false)
     setName("")
+    setDebugInfo("")
   }
 
   const handleCreateNewFamily = () => {
@@ -450,7 +489,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </Button>
             </div>
             <CardTitle className="text-2xl font-bold">Join or Create Family</CardTitle>
-            <CardDescription>We didn't find an existing family for your email. You can join an existing family or create a new one.</CardDescription>
+            <CardDescription>We didn't find an existing family for your email. Check the debug info below.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -483,10 +522,19 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 </Button>
               </div>
 
+              {/* Debug Info Display */}
+              {debugInfo && (
+                <div className="bg-gray-100 p-3 rounded-lg">
+                  <h4 className="text-sm font-medium mb-2">🔍 Debug Info:</h4>
+                  <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
+                    {debugInfo}
+                  </pre>
+                </div>
+              )}
+
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-xs text-blue-700 text-center">
-                  💡 If a family member already added your email address, you'll automatically join their family.<br/>
-                  Otherwise, you can create a new family account.
+                  💡 If the debug info shows your email wasn't found, ask the family admin to double-check the email address they added for you.
                 </p>
               </div>
             </div>
