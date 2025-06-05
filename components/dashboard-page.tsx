@@ -70,6 +70,9 @@ interface DashboardPageProps {
   user: UserType
 }
 
+// Food amount options
+const FOOD_AMOUNTS = [25, 50, 75, 100, 125, 150, 175, 200]
+
 export function DashboardPage({ user }: DashboardPageProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [entries, setEntries] = useState<Entry[]>([])
@@ -86,7 +89,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [newMemberName, setNewMemberName] = useState("")
   const [newMemberEmail, setNewMemberEmail] = useState("")
   const [addingMember, setAddingMember] = useState(false)
-  const [amount, setAmount] = useState("")
+  const [amount, setAmount] = useState("50") // Default to 50g
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
   const [dailySummary, setDailySummary] = useState<DailySummary>({ totalPee: 0, totalPoop: 0, totalFood: 0 })
   const { toast } = useToast()
@@ -230,7 +233,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         timestamp: doc.data().timestamp.toDate(),
       })) as Entry[]
 
-      // Sort by timestamp - newest first
+      // Sort by timestamp - newest first (most recent time at top)
       loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
@@ -291,7 +294,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
         id: docRef.id,
       }
 
-      setEntries((prevEntries) => [newEntryWithId, ...prevEntries])
+      // Add to state and sort immediately to ensure newest appears at top
+      setEntries((prevEntries) => {
+        const updatedEntries = [newEntryWithId, ...prevEntries]
+        return updatedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      })
 
       return true
       
@@ -340,10 +347,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
       return
     }
 
-    if (selectedActivities.has("food") && (!amount.trim() || parseInt(amount) < 1 || parseInt(amount) > 200)) {
+    if (selectedActivities.has("food") && !amount) {
       toast({
-        title: "Valid amount required",
-        description: "Please enter a valid amount between 1-200 grams for food",
+        title: "Select food amount",
+        description: "Please select the amount of food in grams",
         variant: "destructive",
       })
       return
@@ -392,7 +399,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       
       // Reset form
       setSelectedActivities(new Set())
-      setAmount("")
+      setAmount("50") // Reset to default
       setNote("")
     }
   }
@@ -751,11 +758,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </h1>
         </div>
 
-        {/* Daily Summary */}
+        {/* Daily Summary - Updated with consistent text size */}
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-4 w-4 text-gray-600" />
-            <h2 className="text-sm font-medium text-gray-600">Today's Summary</h2>
+            <h2 className="text-base text-gray-600">Today's Summary</h2>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
@@ -843,30 +850,25 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </div>
           </div>
 
-          {/* Amount - Only for food */}
+          {/* Amount - Food dropdown with predefined values */}
           {selectedActivities.has("food") && (
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Utensils className="h-4 w-4" />
                 <span>Grams *</span>
               </div>
-              <Input
-                type="text"
-                placeholder="Grams"
-                value={amount}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '');
-                  if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 200)) {
-                    setAmount(value);
-                  }
-                }}
-                className="[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                style={{ MozAppearance: 'textfield' }}
-                required
-              />
-              <div className="text-xs text-gray-500 mt-1">
-                Enter amount between 1-200 grams
-              </div>
+              <Select value={amount} onValueChange={setAmount}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select amount" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FOOD_AMOUNTS.map((grams) => (
+                    <SelectItem key={grams} value={grams.toString()}>
+                      {grams}g
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
@@ -935,7 +937,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
+                      {/* 24-hour format for time display */}
+                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
                   </div>
                   
