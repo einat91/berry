@@ -8,9 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, AlertCircle } from "lucide-react"
 import Image from "next/image"
 import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
+import { useToast } from "@/hooks/use-toast"
 
 interface User {
   id: string
@@ -25,13 +26,13 @@ interface LoginPageProps {
 
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<string>("login")
-  const [familyCode, setFamilyCode] = useState("")
   const [name, setName] = useState("")
   const [dogName, setDogName] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
   const [showJoinForm, setShowJoinForm] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     const checkFirebase = async () => {
@@ -75,20 +76,17 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       for (const doc of querySnapshot.docs) {
         const data = doc.data()
         
-        // Skip if no family data
-        if (!data.familyCode || !data.familyMembers) {
+        if (!data.dogName || !data.familyMembers) {
           continue
         }
         
-        console.log("👨‍👩‍👧‍👦 Checking family:", data.familyCode, "with", data.familyMembers.length, "members")
+        console.log("👨‍👩‍👧‍👦 Checking family with", data.familyMembers.length, "members")
         
-        // Check each family member for email match
         for (let i = 0; i < data.familyMembers.length; i++) {
           const member = data.familyMembers[i]
           
           let memberEmail = null
           
-          // Handle different member formats
           if (typeof member === 'string') {
             memberEmail = member
           } else if (member && typeof member === 'object') {
@@ -115,6 +113,28 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
+  const validateSignupForm = () => {
+    if (!name.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter your name",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    if (!dogName.trim()) {
+      toast({
+        title: "Dog's Name Required", 
+        description: "Please enter your dog's name",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    return true
+  }
+
   const handleGoogleLogin = async (isJoining = false, isSignup = false) => {
     if (!firebaseReady) {
       setError("App is still initializing. Please wait a moment.")
@@ -122,25 +142,23 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
 
     setError("")
+
+    // Validation for signup
+    if (isSignup && !validateSignupForm()) {
+      return
+    }
+
+    // Validation for joining
+    if (isJoining && !name.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter your name",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
-
-    if (isJoining && !familyCode) {
-      setError("Please enter a family code")
-      setLoading(false)
-      return
-    }
-
-    if ((isJoining || isSignup) && !name.trim()) {
-      setError("Please enter your name")
-      setLoading(false)
-      return
-    }
-
-    if (isSignup && !dogName.trim()) {
-      setError("Please enter your dog's name")
-      setLoading(false)
-      return
-    }
 
     try {
       const auth: any = await getAuth()
@@ -148,9 +166,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const db: any = await getDb()
 
       const { signInWithPopup } = await import("firebase/auth")
-      const { doc, getDoc, setDoc, updateDoc, arrayUnion, collection, query, where, getDocs } = await import(
-        "firebase/firestore"
-      )
+      const { doc, getDoc, setDoc, updateDoc, arrayUnion } = await import("firebase/firestore")
 
       const result = await signInWithPopup(auth, provider)
       const user = result.user
@@ -177,23 +193,19 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
 
       if (isJoining) {
-        console.log("👥 User joining family with code:", familyCode)
+        console.log("👥 User joining existing family")
         
-        // Find family by code
-        const usersRef = collection(db, "users")
-        const q = query(usersRef, where("familyCode", "==", familyCode.toUpperCase()))
-        const querySnapshot = await getDocs(q)
+        // Find any existing family by searching for families
+        const familyDoc = await findUserInFamily(user.email, db)
 
-        if (querySnapshot.empty) {
-          setError("Invalid family code. Please check and try again.")
+        if (!familyDoc) {
+          setError("No family found for your email address. Please sign up to create a new family.")
           setLoading(false)
           return
         }
 
-        const familyDoc = querySnapshot.docs[0]
         const familyData = familyDoc.data()
-
-        console.log("📋 Found family:", familyData.dogName, familyData.familyCode)
+        console.log("📋 Found family:", familyData.dogName)
 
         // Add user to family members list
         const newMember = { name: displayName, email: user.email }
@@ -207,7 +219,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           email: user.email,
           dogName: familyData.dogName,
           familyMembers: [...(familyData.familyMembers || []), newMember],
-          familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
         })
@@ -219,20 +230,17 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       if (isSignup) {
         console.log("🆕 Creating new family")
-        
-        const familyCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase()
 
         const userData = {
           name: displayName,
           email: user.email,
           dogName: dogName.trim(),
           familyMembers: [{ name: displayName, email: user.email }],
-          familyCode: familyCodeGenerated,
           createdAt: new Date(),
         }
 
         await setDoc(userDocRef, userData)
-        console.log("✅ New family created with code:", familyCodeGenerated)
+        console.log("✅ New family created")
         onLogin(loggedInUser)
         return
       }
@@ -244,11 +252,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       if (familyDoc) {
         const familyData = familyDoc.data()
         console.log("🎉 Found existing family! Joining automatically")
-        console.log("Family details:", {
-          dogName: familyData.dogName,
-          familyCode: familyData.familyCode,
-          members: familyData.familyMembers
-        })
         
         // Create user document with existing family data
         await setDoc(userDocRef, {
@@ -256,7 +259,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           email: user.email,
           dogName: familyData.dogName,
           familyMembers: familyData.familyMembers,
-          familyCode: familyData.familyCode,
           photoUrl: familyData.photoUrl,
           createdAt: new Date(),
         })
@@ -284,7 +286,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setShowJoinForm(false)
     setError("")
     setName("")
-    setFamilyCode("")
   }
 
   // Show join form if user needs to join a family
@@ -299,16 +300,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <div className="flex items-center gap-2 mb-4">
               <Button variant="ghost" size="sm" onClick={handleBackToLogin}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                Back to Login
               </Button>
             </div>
-            <CardTitle className="text-2xl font-bold">Join a Family</CardTitle>
-            <CardDescription>Enter the family code to join an existing family</CardDescription>
+            <CardTitle className="text-2xl font-bold">Join or Create Family</CardTitle>
+            <CardDescription>We didn't find an existing family for your email. You can join an existing family or create a new one.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="joinName">Your Name</Label>
+                <Label htmlFor="joinName">Your Name *</Label>
                 <Input
                   id="joinName"
                   placeholder="Enter your name"
@@ -318,27 +319,38 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="familyCode">Family Code</Label>
-                <Input
-                  id="familyCode"
-                  placeholder="Enter the 6-digit family code"
-                  value={familyCode}
-                  onChange={(e) => setFamilyCode(e.target.value.toUpperCase())}
-                  className="font-mono"
-                  maxLength={6}
-                />
+                <Button 
+                  onClick={() => handleGoogleLogin(true, false)} 
+                  className="w-full h-12" 
+                  disabled={loading}
+                  variant="outline"
+                >
+                  {loading ? "Searching..." : "Try to Join Existing Family"}
+                </Button>
+                
+                <Button 
+                  onClick={() => {
+                    setActiveTab("signup")
+                    setShowJoinForm(false)
+                  }} 
+                  className="w-full h-12" 
+                  disabled={loading}
+                >
+                  Create New Family
+                </Button>
               </div>
 
-              <Button onClick={() => handleGoogleLogin(true, false)} className="w-full h-12" disabled={loading}>
-                {loading ? "Joining..." : "Join Family"}
-              </Button>
-
-              {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
 
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-xs text-blue-700 text-center">
-                  💡 Ask your family member for the 6-digit code<br/>
-                  It looks like: <strong>AU5Z23</strong>
+                  💡 If a family member already signed up with your email address, you'll automatically join their family.<br/>
+                  Otherwise, you can create a new family account.
                 </p>
               </div>
             </div>
@@ -363,7 +375,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
               <p className="text-gray-600">Initializing app...</p>
-              {error && <p className="text-red-500 mt-4">{error}</p>}
+              {error && (
+                <div className="flex items-center justify-center gap-2 mt-4 p-3 bg-red-50 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
             </div>
           ) : (
             <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
@@ -379,7 +396,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     {loading ? "Logging in..." : "Log in with Google"}
                   </Button>
 
-                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                  {error && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg">
+                      <AlertCircle className="h-4 w-4 text-red-500" />
+                      <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                  )}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
                     Will automatically find your family or guide you to join one
@@ -390,7 +412,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               <TabsContent value="signup">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Your Name</Label>
+                    <Label htmlFor="name">Your Name *</Label>
                     <Input
                       id="name"
                       placeholder="Enter your name"
@@ -400,7 +422,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="dogName">Your Dog's Name</Label>
+                    <Label htmlFor="dogName">Your Dog's Name *</Label>
                     <Input
                       id="dogName"
                       placeholder="Enter your dog's name"
@@ -414,7 +436,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     {loading ? "Signing up..." : "Sign up with Google"}
                   </Button>
 
-                  {error && <p className="text-sm text-red-500 text-center">{error}</p>}
+                  {error && (
+                    <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg">
+                      <AlertCircle className="h-4 w-4 text-red-500" />
+                      <p className="text-sm text-red-700">{error}</p>
+                    </div>
+                  )}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
                     Creates a new family account for your dog
