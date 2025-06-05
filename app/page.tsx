@@ -59,11 +59,14 @@ export default function Home() {
                   avatar: firebaseUser.photoURL || "/placeholder.svg",
                 }
                 setUser(userData)
+                console.log("✅ User authenticated and setup complete")
               } else {
                 // User exists but hasn't completed setup - redirect to login
+                console.log("❓ User authenticated but setup incomplete")
                 setUser(null)
               }
             } else {
+              console.log("❌ No user authenticated")
               setUser(null)
             }
           } catch (error) {
@@ -105,11 +108,13 @@ export default function Home() {
   }, [toast])
 
   const handleLogin = (userData: User) => {
+    console.log("🎉 User logged in successfully:", userData.name)
     setUser(userData)
     setError(null)
   }
 
   const handleLogout = () => {
+    console.log("👋 User logged out")
     setUser(null)
   }
 
