@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, AlertCircle } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Image from "next/image"
 import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
 import { useToast } from "@/hooks/use-toast"
@@ -28,7 +28,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [activeTab, setActiveTab] = useState<string>("login")
   const [name, setName] = useState("")
   const [dogName, setDogName] = useState("")
-  const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
   const [showJoinForm, setShowJoinForm] = useState(false)
@@ -43,7 +42,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         setFirebaseReady(true)
       } catch (error) {
         console.error("Error checking Firebase:", error)
-        setError("Failed to initialize app. Please refresh the page.")
+        toast({
+          title: "Initialization Error",
+          description: "Failed to initialize app. Please refresh the page.",
+          variant: "destructive",
+        })
       }
     }
 
@@ -137,11 +140,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   const handleGoogleLogin = async (isJoining = false, isSignup = false) => {
     if (!firebaseReady) {
-      setError("App is still initializing. Please wait a moment.")
+      toast({
+        title: "Please Wait",
+        description: "App is still initializing. Please wait a moment.",
+        variant: "destructive",
+      })
       return
     }
-
-    setError("")
 
     // Validation for signup
     if (isSignup && !validateSignupForm()) {
@@ -199,7 +204,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         const familyDoc = await findUserInFamily(user.email, db)
 
         if (!familyDoc) {
-          setError("No family found for your email address. Please sign up to create a new family.")
+          toast({
+            title: "No Family Found",
+            description: "No family found for your email address. Please sign up to create a new family.",
+            variant: "destructive",
+          })
           setLoading(false)
           return
         }
@@ -229,7 +238,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
 
       if (isSignup) {
-        console.log("🆕 Creating new family")
+        console.log("🆕 Creating new family for signup")
 
         const userData = {
           name: displayName,
@@ -240,7 +249,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         }
 
         await setDoc(userDocRef, userData)
-        console.log("✅ New family created")
+        console.log("✅ New family created successfully")
+        
+        toast({
+          title: "Welcome to Berry!",
+          description: `Family created for ${dogName}. Start tracking activities!`,
+        })
+        
         onLogin(loggedInUser)
         return
       }
@@ -263,6 +278,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           createdAt: new Date(),
         })
         
+        toast({
+          title: "Welcome Back!",
+          description: `Joined ${familyData.dogName}'s family successfully.`,
+        })
+        
         onLogin(loggedInUser)
       } else {
         console.log("❓ No family found - showing join form")
@@ -273,9 +293,17 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     } catch (err: any) {
       console.error("❌ Login error:", err)
       if (err.code === "auth/unauthorized-domain") {
-        setError("Please use a different browser or enable third-party cookies.")
+        toast({
+          title: "Browser Issue",
+          description: "Please use a different browser or enable third-party cookies.",
+          variant: "destructive",
+        })
       } else {
-        setError(err.message || "Failed to log in. Please try again.")
+        toast({
+          title: "Login Failed",
+          description: err.message || "Failed to log in. Please try again.",
+          variant: "destructive",
+        })
       }
     } finally {
       setLoading(false)
@@ -284,8 +312,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   const handleBackToLogin = () => {
     setShowJoinForm(false)
-    setError("")
     setName("")
+  }
+
+  const handleCreateNewFamily = () => {
+    setShowJoinForm(false)
+    setActiveTab("signup")
   }
 
   // Show join form if user needs to join a family
@@ -329,23 +361,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 </Button>
                 
                 <Button 
-                  onClick={() => {
-                    setActiveTab("signup")
-                    setShowJoinForm(false)
-                  }} 
+                  onClick={handleCreateNewFamily} 
                   className="w-full h-12" 
                   disabled={loading}
                 >
                   Create New Family
                 </Button>
               </div>
-
-              {error && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg">
-                  <AlertCircle className="h-4 w-4 text-red-500" />
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              )}
 
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-xs text-blue-700 text-center">
@@ -375,12 +397,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
               <p className="text-gray-600">Initializing app...</p>
-              {error && (
-                <div className="flex items-center justify-center gap-2 mt-4 p-3 bg-red-50 rounded-lg">
-                  <AlertCircle className="h-4 w-4 text-red-500" />
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              )}
             </div>
           ) : (
             <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
@@ -395,13 +411,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     <GoogleIcon className="w-5 h-5 mr-3" />
                     {loading ? "Logging in..." : "Log in with Google"}
                   </Button>
-
-                  {error && (
-                    <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg">
-                      <AlertCircle className="h-4 w-4 text-red-500" />
-                      <p className="text-sm text-red-700">{error}</p>
-                    </div>
-                  )}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
                     Will automatically find your family or guide you to join one
@@ -433,15 +442,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
                   <Button onClick={() => handleGoogleLogin(false, true)} className="w-full h-12" disabled={loading}>
                     <GoogleIcon className="w-5 h-5 mr-3" />
-                    {loading ? "Signing up..." : "Sign up with Google"}
+                    {loading ? "Creating family..." : "Sign up with Google"}
                   </Button>
-
-                  {error && (
-                    <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg">
-                      <AlertCircle className="h-4 w-4 text-red-500" />
-                      <p className="text-sm text-red-700">{error}</p>
-                    </div>
-                  )}
 
                   <p className="text-xs text-center text-gray-600 mt-4">
                     Creates a new family account for your dog
