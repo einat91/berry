@@ -40,8 +40,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         await getProvider()
         await getDb()
         setFirebaseReady(true)
+        console.log("✅ Firebase initialized successfully")
       } catch (error) {
-        console.error("Error checking Firebase:", error)
+        console.error("❌ Error checking Firebase:", error)
         toast({
           title: "Initialization Error",
           description: "Failed to initialize app. Please refresh the page.",
@@ -59,59 +60,94 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const auth: any = await getAuth()
       const { setPersistence, browserLocalPersistence } = await import("firebase/auth")
       await setPersistence(auth, browserLocalPersistence)
-      console.log("Firebase persistence set to LOCAL")
+      console.log("✅ Firebase persistence set to LOCAL")
     } catch (error) {
-      console.error("Error setting persistence:", error)
+      console.error("❌ Error setting persistence:", error)
     }
   }
 
   const findUserInFamily = async (userEmail: string, db: any) => {
-    const { collection, getDocs } = await import("firebase/firestore")
-    
     try {
-      console.log("🔍 Searching for email:", userEmail)
+      const { collection, getDocs } = await import("firebase/firestore")
+      
+      console.log("🔍 Starting family search for email:", userEmail)
+      
+      if (!userEmail || typeof userEmail !== 'string') {
+        console.log("❌ Invalid email provided:", userEmail)
+        return null
+      }
+
+      // Normalize email for comparison (lowercase and trim)
+      const normalizedSearchEmail = userEmail.toLowerCase().trim()
+      console.log("🔍 Normalized search email:", normalizedSearchEmail)
       
       const usersRef = collection(db, "users")
       const querySnapshot = await getDocs(usersRef)
       
-      console.log("📂 Found", querySnapshot.docs.length, "documents")
+      console.log("📂 Total documents found:", querySnapshot.docs.length)
       
       for (const doc of querySnapshot.docs) {
-        const data = doc.data()
-        
-        if (!data.dogName || !data.familyMembers) {
-          continue
-        }
-        
-        console.log("👨‍👩‍👧‍👦 Checking family with", data.familyMembers.length, "members")
-        
-        for (let i = 0; i < data.familyMembers.length; i++) {
-          const member = data.familyMembers[i]
+        try {
+          const data = doc.data()
           
-          let memberEmail = null
-          
-          if (typeof member === 'string') {
-            memberEmail = member
-          } else if (member && typeof member === 'object') {
-            memberEmail = member.email
+          // Skip documents without required family data
+          if (!data.dogName || !data.familyMembers || !Array.isArray(data.familyMembers)) {
+            console.log("⏭️ Skipping document - no family data:", doc.id)
+            continue
           }
           
-          if (memberEmail) {
-            console.log(`📧 Comparing: "${memberEmail.toLowerCase()}" vs "${userEmail.toLowerCase()}"`)
+          console.log("👨‍👩‍👧‍👦 Checking family:", {
+            docId: doc.id,
+            dogName: data.dogName,
+            memberCount: data.familyMembers.length
+          })
+          
+          // Check each family member
+          for (let i = 0; i < data.familyMembers.length; i++) {
+            const member = data.familyMembers[i]
             
-            if (memberEmail.toLowerCase().trim() === userEmail.toLowerCase().trim()) {
-              console.log("✅ PERFECT MATCH FOUND! Returning family data")
-              return doc
+            let memberEmail = null
+            
+            // Handle different member formats
+            if (typeof member === 'string') {
+              memberEmail = member
+            } else if (member && typeof member === 'object' && member.email) {
+              memberEmail = member.email
+            }
+            
+            if (memberEmail && typeof memberEmail === 'string') {
+              // Normalize member email for comparison
+              const normalizedMemberEmail = memberEmail.toLowerCase().trim()
+              
+              console.log(`📧 Comparing emails:`)
+              console.log(`   Search: "${normalizedSearchEmail}"`)
+              console.log(`   Member: "${normalizedMemberEmail}"`)
+              console.log(`   Match: ${normalizedSearchEmail === normalizedMemberEmail}`)
+              
+              if (normalizedSearchEmail === normalizedMemberEmail) {
+                console.log("✅ FAMILY MATCH FOUND!")
+                console.log("Family details:", {
+                  dogName: data.dogName,
+                  memberCount: data.familyMembers.length,
+                  docId: doc.id
+                })
+                return doc
+              }
             }
           }
+        } catch (memberError) {
+          console.error("❌ Error processing family document:", doc.id, memberError)
+          // Continue to next document instead of failing
+          continue
         }
       }
       
-      console.log("❌ No family found for email:", userEmail)
+      console.log("❌ No family found for email:", normalizedSearchEmail)
       return null
       
     } catch (error) {
-      console.error("❌ Search error:", error)
+      console.error("❌ Critical error in family search:", error)
+      // Return null instead of throwing to prevent app crash
       return null
     }
   }
@@ -166,6 +202,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setLoading(true)
 
     try {
+      console.log("🚀 Starting Google login process...")
+      
       const auth: any = await getAuth()
       const provider: any = await getProvider()
       const db: any = await getDb()
@@ -173,37 +211,52 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const { signInWithPopup } = await import("firebase/auth")
       const { doc, getDoc, setDoc, updateDoc, arrayUnion } = await import("firebase/firestore")
 
+      console.log("🔐 Attempting Google sign-in...")
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
-      console.log("🔐 User signed in:", user.email)
+      if (!user || !user.email) {
+        throw new Error("No user or email returned from Google login")
+      }
+
+      console.log("✅ Google sign-in successful:", {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName
+      })
 
       const displayName = isSignup || isJoining ? name.trim() : (user.displayName || "Dog Parent")
 
       const loggedInUser: User = {
         id: user.uid,
         name: displayName,
-        email: user.email || "",
+        email: user.email,
         avatar: user.photoURL || "/placeholder.svg",
       }
 
       // Check if user already exists with family data
+      console.log("🔍 Checking if user already has family setup...")
       const userDocRef = doc(db, "users", user.uid)
       const userDoc = await getDoc(userDocRef)
 
       if (userDoc.exists() && userDoc.data()?.dogName && !isJoining) {
         console.log("✅ User already has family setup, logging in")
+        toast({
+          title: "Welcome Back!",
+          description: "Logged in successfully.",
+        })
         onLogin(loggedInUser)
         return
       }
 
       if (isJoining) {
-        console.log("👥 User joining existing family")
+        console.log("👥 User attempting to join existing family")
         
         // Find any existing family by searching for families
         const familyDoc = await findUserInFamily(user.email, db)
 
         if (!familyDoc) {
+          console.log("❌ No family found for joining attempt")
           toast({
             title: "No Family Found",
             description: "No family found for your email address. Please sign up to create a new family.",
@@ -213,95 +266,154 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           return
         }
 
-        const familyData = familyDoc.data()
-        console.log("📋 Found family:", familyData.dogName)
+        try {
+          const familyData = familyDoc.data()
+          console.log("📋 Found family for joining:", familyData.dogName)
 
-        // Add user to family members list
-        const newMember = { name: displayName, email: user.email }
-        await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion(newMember)
-        })
+          // Add user to family members list
+          const newMember = { name: displayName, email: user.email }
+          await updateDoc(doc(db, "users", familyDoc.id), {
+            familyMembers: arrayUnion(newMember)
+          })
 
-        // Create user's own document with family data
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: user.email,
-          dogName: familyData.dogName,
-          familyMembers: [...(familyData.familyMembers || []), newMember],
-          photoUrl: familyData.photoUrl,
-          createdAt: new Date(),
-        })
+          // Create user's own document with family data
+          await setDoc(userDocRef, {
+            name: displayName,
+            email: user.email,
+            dogName: familyData.dogName,
+            familyMembers: [...(familyData.familyMembers || []), newMember],
+            photoUrl: familyData.photoUrl,
+            createdAt: new Date(),
+          })
 
-        console.log("✅ Successfully joined family!")
-        onLogin(loggedInUser)
-        return
+          console.log("✅ Successfully joined family!")
+          toast({
+            title: "Welcome to the Family!",
+            description: `Successfully joined ${familyData.dogName}'s family.`,
+          })
+          onLogin(loggedInUser)
+          return
+        } catch (joinError) {
+          console.error("❌ Error joining family:", joinError)
+          toast({
+            title: "Join Failed",
+            description: "Failed to join family. Please try again.",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
       }
 
       if (isSignup) {
         console.log("🆕 Creating new family for signup")
 
-        const userData = {
-          name: displayName,
-          email: user.email,
-          dogName: dogName.trim(),
-          familyMembers: [{ name: displayName, email: user.email }],
-          createdAt: new Date(),
-        }
+        try {
+          const userData = {
+            name: displayName,
+            email: user.email,
+            dogName: dogName.trim(),
+            familyMembers: [{ name: displayName, email: user.email }],
+            createdAt: new Date(),
+          }
 
-        await setDoc(userDocRef, userData)
-        console.log("✅ New family created successfully")
-        
-        toast({
-          title: "Welcome to Berry!",
-          description: `Family created for ${dogName}. Start tracking activities!`,
-        })
-        
-        onLogin(loggedInUser)
-        return
+          await setDoc(userDocRef, userData)
+          console.log("✅ New family created successfully")
+          
+          toast({
+            title: "Welcome to Berry!",
+            description: `Family created for ${dogName}. Start tracking activities!`,
+          })
+          
+          onLogin(loggedInUser)
+          return
+        } catch (signupError) {
+          console.error("❌ Error creating new family:", signupError)
+          toast({
+            title: "Signup Failed",
+            description: "Failed to create family. Please try again.",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
       }
 
       // Regular login - search for existing family
-      console.log("🔍 Regular login - searching for existing family")
-      const familyDoc = await findUserInFamily(user.email, db)
-      
-      if (familyDoc) {
-        const familyData = familyDoc.data()
-        console.log("🎉 Found existing family! Joining automatically")
+      console.log("🔍 Regular login - searching for existing family...")
+      try {
+        const familyDoc = await findUserInFamily(user.email, db)
         
-        // Create user document with existing family data
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: user.email,
-          dogName: familyData.dogName,
-          familyMembers: familyData.familyMembers,
-          photoUrl: familyData.photoUrl,
-          createdAt: new Date(),
-        })
+        if (familyDoc) {
+          const familyData = familyDoc.data()
+          console.log("🎉 Found existing family! Joining automatically")
+          
+          // Create user document with existing family data
+          await setDoc(userDocRef, {
+            name: displayName,
+            email: user.email,
+            dogName: familyData.dogName,
+            familyMembers: familyData.familyMembers,
+            photoUrl: familyData.photoUrl,
+            createdAt: new Date(),
+          })
+          
+          toast({
+            title: "Welcome Back!",
+            description: `Joined ${familyData.dogName}'s family successfully.`,
+          })
+          
+          onLogin(loggedInUser)
+        } else {
+          console.log("❓ No family found - showing join form")
+          console.log("🔄 Switching to join/create family flow...")
+          
+          // CRITICAL: Always show the join form instead of exiting
+          setShowJoinForm(true)
+          setLoading(false)
+          
+          toast({
+            title: "Family Setup Needed",
+            description: "We'll help you join an existing family or create a new one.",
+          })
+        }
+      } catch (searchError) {
+        console.error("❌ Error searching for family:", searchError)
+        console.log("🔄 Family search failed - showing join form as fallback")
         
-        toast({
-          title: "Welcome Back!",
-          description: `Joined ${familyData.dogName}'s family successfully.`,
-        })
-        
-        onLogin(loggedInUser)
-      } else {
-        console.log("❓ No family found - showing join form")
+        // CRITICAL: On any search error, show join form instead of crashing
         setShowJoinForm(true)
         setLoading(false)
+        
+        toast({
+          title: "Let's Get You Set Up",
+          description: "We'll help you join an existing family or create a new one.",
+        })
       }
 
     } catch (err: any) {
-      console.error("❌ Login error:", err)
+      console.error("❌ Critical login error:", err)
+      
+      // CRITICAL: Never exit the app - always handle errors gracefully
       if (err.code === "auth/unauthorized-domain") {
         toast({
           title: "Browser Issue",
           description: "Please use a different browser or enable third-party cookies.",
           variant: "destructive",
         })
-      } else {
+      } else if (err.code === "auth/popup-closed-by-user") {
         toast({
-          title: "Login Failed",
-          description: err.message || "Failed to log in. Please try again.",
+          title: "Login Cancelled",
+          description: "Please try logging in again.",
+          variant: "destructive",
+        })
+      } else {
+        // For any other error, show join form as fallback
+        console.log("🔄 Login error occurred - showing join form as safe fallback")
+        setShowJoinForm(true)
+        toast({
+          title: "Let's Try a Different Approach",
+          description: "We'll help you set up your account.",
           variant: "destructive",
         })
       }
@@ -311,11 +423,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   const handleBackToLogin = () => {
+    console.log("🔙 Going back to login page")
     setShowJoinForm(false)
     setName("")
   }
 
   const handleCreateNewFamily = () => {
+    console.log("🔄 Switching to create new family")
     setShowJoinForm(false)
     setActiveTab("signup")
   }
@@ -371,7 +485,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
               <div className="bg-blue-50 p-3 rounded-lg">
                 <p className="text-xs text-blue-700 text-center">
-                  💡 If a family member already signed up with your email address, you'll automatically join their family.<br/>
+                  💡 If a family member already added your email address, you'll automatically join their family.<br/>
                   Otherwise, you can create a new family account.
                 </p>
               </div>
