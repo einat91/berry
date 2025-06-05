@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -9,8 +9,6 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Copy,
-  Check,
   Droplets,
   Waves,
   Utensils,
@@ -20,6 +18,8 @@ import {
   UserPlus,
   X,
   AlertCircle,
+  Trash2,
+  TrendingUp,
 } from "lucide-react"
 import { format, addDays, subDays, isToday } from "date-fns"
 import Image from "next/image"
@@ -51,13 +51,19 @@ interface Entry {
   addedBy: string
   amount?: string
   userId: string
-  familyCode: string
+  familyId: string
 }
 
 interface FamilyMember {
   name: string
   email?: string
   userId?: string
+}
+
+interface DailySummary {
+  totalPee: number
+  totalPoop: number
+  totalFood: number
 }
 
 interface DashboardPageProps {
@@ -69,31 +75,38 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [entries, setEntries] = useState<Entry[]>([])
   const [dogName, setDogName] = useState("")
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
-  const [familyCode, setFamilyCode] = useState("")
-  const [selectedActivity, setSelectedActivity] = useState<"pee" | "poop" | "food" | null>(null)
+  const [familyId, setFamilyId] = useState("")
+  const [selectedActivities, setSelectedActivities] = useState<Set<"pee" | "poop" | "food">>(new Set())
   const [selectedTime, setSelectedTime] = useState(format(new Date(), "HH:mm"))
   const [selectedMember, setSelectedMember] = useState("")
   const [note, setNote] = useState("")
-  const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [loadingEntries, setLoadingEntries] = useState(false)
   const [newMemberName, setNewMemberName] = useState("")
   const [newMemberEmail, setNewMemberEmail] = useState("")
   const [addingMember, setAddingMember] = useState(false)
-  const { toast } = useToast()
   const [amount, setAmount] = useState("")
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
+  const [dailySummary, setDailySummary] = useState<DailySummary>({ totalPee: 0, totalPoop: 0, totalFood: 0 })
+  const { toast } = useToast()
+
+  // Touch handling for swipe to delete
+  const [touchStart, setTouchStart] = useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = useState<number | null>(null)
+  const [swipedEntryId, setSwipedEntryId] = useState<string | null>(null)
+
+  const swipeRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
 
   useEffect(() => {
     loadUserData()
   }, [])
 
   useEffect(() => {
-    if (familyCode) {
+    if (familyId) {
       loadEntries()
     }
-  }, [selectedDate, familyCode])
+  }, [selectedDate, familyId])
 
   useEffect(() => {
     if (familyMembers.length > 0 && !selectedMember) {
@@ -101,12 +114,37 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }, [familyMembers])
 
+  useEffect(() => {
+    calculateDailySummary()
+  }, [entries])
+
+  const calculateDailySummary = () => {
+    const summary = entries.reduce(
+      (acc, entry) => {
+        switch (entry.type) {
+          case "pee":
+            acc.totalPee += 1
+            break
+          case "poop":
+            acc.totalPoop += 1
+            break
+          case "food":
+            const grams = entry.amount ? parseInt(entry.amount.replace('g', '')) || 0 : 0
+            acc.totalFood += grams
+            break
+        }
+        return acc
+      },
+      { totalPee: 0, totalPoop: 0, totalFood: 0 }
+    )
+    setDailySummary(summary)
+  }
+
   const loadUserData = async () => {
     try {
       const db: any = await getDb()
       const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
-      // First try to get user's own document
       const userDocRef = doc(db, "users", user.id)
       const userDocSnap = await getDoc(userDocRef)
 
@@ -115,25 +153,20 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userDocSnap.exists()) {
         userData = userDocSnap.data()
       } else {
-        // If user doesn't have a document, they might be part of someone else's family
-        // Search for families where this user is a member
         const usersRef = collection(db, "users")
         const q = query(usersRef, where("familyMembers", "array-contains", user.name))
         const querySnapshot = await getDocs(q)
 
         if (!querySnapshot.empty) {
-          // Found a family that includes this user
           const familyDoc = querySnapshot.docs[0]
           userData = familyDoc.data()
           
-          // Create user document with family data
           const { setDoc } = await import("firebase/firestore")
           await setDoc(userDocRef, {
             name: user.name,
             email: user.email,
             dogName: userData.dogName,
             familyMembers: userData.familyMembers,
-            familyCode: userData.familyCode,
             photoUrl: userData.photoUrl,
             createdAt: new Date(),
           })
@@ -143,7 +176,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
       if (userData) {
         setDogName(userData.dogName || "")
         
-        // Convert familyMembers to proper format
         const members = userData.familyMembers || [user.name]
         const formattedMembers = members.map((member: any) => {
           if (typeof member === 'string') {
@@ -153,7 +185,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
         })
         
         setFamilyMembers(formattedMembers)
-        setFamilyCode(userData.familyCode || "")
+        // Use the user's document ID as the family identifier
+        setFamilyId(userDocSnap.id || user.id)
       } else {
         toast({
           title: "Setup Required",
@@ -174,7 +207,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const loadEntries = async () => {
-    if (!familyCode) return
+    if (!familyId) return
 
     try {
       setLoadingEntries(true)
@@ -184,10 +217,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
 
-      // Fixed query - removed the problematic orderBy that was causing issues
       const q = query(
         entriesRef,
-        where("familyCode", "==", familyCode),
+        where("familyId", "==", familyId),
         where("date", "==", dateKey)
       )
 
@@ -198,7 +230,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         timestamp: doc.data().timestamp.toDate(),
       })) as Entry[]
 
-      // Sort in memory instead of using Firebase orderBy
+      // Sort by timestamp - newest first
       loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
@@ -217,7 +249,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   }
 
   const saveEntry = async (entry: Entry) => {
-    if (!familyCode) {
+    if (!familyId) {
       toast({
         title: "Family Setup Required",
         description: "Please complete your family setup before logging activities.",
@@ -231,24 +263,18 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const db: any = await getDb()
       const { collection, addDoc, Timestamp } = await import("firebase/firestore")
 
-      console.log("🔍 Attempting to save entry:", entry)
-      console.log("📊 Current user:", user)
-      console.log("🏠 Family code:", familyCode)
-
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       
-      // Simplified entry data structure
       const entryData = {
         type: entry.type,
         timestamp: Timestamp.fromDate(entry.timestamp),
         addedBy: entry.addedBy,
         userId: user.id,
-        familyCode: familyCode,
+        familyId: familyId,
         date: dateKey,
         createdAt: Timestamp.fromDate(new Date()),
       }
 
-      // Add optional fields only if they exist
       if (entry.notes && entry.notes.trim()) {
         entryData.notes = entry.notes.trim()
       }
@@ -257,12 +283,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
         entryData.amount = entry.amount.trim()
       }
 
-      console.log("💾 Saving entry data:", entryData)
-
       const entriesRef = collection(db, "entries")
       const docRef = await addDoc(entriesRef, entryData)
-      
-      console.log("✅ Entry saved successfully with ID:", docRef.id)
 
       const newEntryWithId = {
         ...entry,
@@ -271,20 +293,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       setEntries((prevEntries) => [newEntryWithId, ...prevEntries])
 
-      toast({
-        title: "Activity Saved",
-        description: `${entry.type.charAt(0).toUpperCase() + entry.type.slice(1)} activity saved successfully!`,
-      })
-
       return true
       
     } catch (error) {
       console.error("❌ Error saving entry:", error)
-      console.error("Error details:", {
-        code: error.code,
-        message: error.message,
-        stack: error.stack
-      })
       
       let errorMessage = "Failed to save activity. "
       
@@ -309,11 +321,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
-  const handleLogActivity = async () => {
-    if (!selectedActivity) {
+  const handleLogActivities = async () => {
+    if (selectedActivities.size === 0) {
       toast({
         title: "Select an activity",
-        description: "Please select an activity type (pee, poop, or food)",
+        description: "Please select at least one activity type",
         variant: "destructive",
       })
       return
@@ -328,10 +340,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
       return
     }
 
-    if (selectedActivity === "food" && (!amount.trim() || parseInt(amount) < 1 || parseInt(amount) > 200)) {
+    if (selectedActivities.has("food") && (!amount.trim() || parseInt(amount) < 1 || parseInt(amount) > 200)) {
       toast({
         title: "Valid amount required",
-        description: "Please enter a valid amount between 1-200 grams",
+        description: "Please enter a valid amount between 1-200 grams for food",
         variant: "destructive",
       })
       return
@@ -353,24 +365,93 @@ export function DashboardPage({ user }: DashboardPageProps) {
     const timestamp = new Date(selectedDate)
     timestamp.setHours(hours, minutes, 0, 0)
 
-    const newEntry: Entry = {
-      id: "",
-      type: selectedActivity,
-      timestamp,
-      addedBy: selectedMember,
-      userId: user.id,
-      familyCode: familyCode,
-      ...(note && { notes: note }),
-      ...(selectedActivity === "food" && amount && { amount: `${amount}g` }),
+    const activitiesToLog = Array.from(selectedActivities)
+    let successCount = 0
+
+    for (const activity of activitiesToLog) {
+      const newEntry: Entry = {
+        id: "",
+        type: activity,
+        timestamp,
+        addedBy: selectedMember,
+        userId: user.id,
+        familyId: familyId,
+        ...(note && { notes: note }),
+        ...(activity === "food" && amount && { amount: `${amount}g` }),
+      }
+
+      const success = await saveEntry(newEntry)
+      if (success) successCount++
     }
 
-    const success = await saveEntry(newEntry)
-
-    if (success) {
-      setSelectedActivity(null)
+    if (successCount > 0) {
+      toast({
+        title: "Activities Saved",
+        description: `${successCount} ${successCount === 1 ? 'activity' : 'activities'} saved successfully!`,
+      })
+      
+      // Reset form
+      setSelectedActivities(new Set())
       setAmount("")
       setNote("")
     }
+  }
+
+  const deleteEntry = async (entryId: string) => {
+    try {
+      const db: any = await getDb()
+      const { doc, deleteDoc } = await import("firebase/firestore")
+
+      await deleteDoc(doc(db, "entries", entryId))
+      
+      setEntries(prev => prev.filter(entry => entry.id !== entryId))
+      setSwipedEntryId(null)
+      
+      toast({
+        title: "Activity Deleted",
+        description: "Activity has been removed successfully.",
+      })
+    } catch (error) {
+      console.error("Error deleting entry:", error)
+      toast({
+        title: "Delete Failed",
+        description: "Could not delete activity. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleTouchStart = (e: React.TouchEvent, entryId: string) => {
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent, entryId: string) => {
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const handleTouchEnd = (entryId: string) => {
+    if (!touchStart || !touchEnd) return
+    
+    const distance = touchStart - touchEnd
+    const isLeftSwipe = distance > 50
+    const isRightSwipe = distance < -50
+
+    if (isLeftSwipe) {
+      setSwipedEntryId(entryId)
+    } else if (isRightSwipe) {
+      setSwipedEntryId(null)
+    }
+  }
+
+  const toggleActivity = (activity: "pee" | "poop" | "food") => {
+    const newActivities = new Set(selectedActivities)
+    if (newActivities.has(activity)) {
+      newActivities.delete(activity)
+    } else {
+      newActivities.add(activity)
+    }
+    setSelectedActivities(newActivities)
   }
 
   const getActivityIcon = (type: "pee" | "poop" | "food") => {
@@ -403,16 +484,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     } catch (error) {
       console.error("Error signing out:", error)
     }
-  }
-
-  const copyFamilyCode = () => {
-    navigator.clipboard.writeText(familyCode)
-    setCopied(true)
-    toast({
-      title: "Copied!",
-      description: "Family code copied to clipboard",
-    })
-    setTimeout(() => setCopied(false), 2000)
   }
 
   const goToPreviousDay = () => {
@@ -523,7 +594,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     )
   }
 
-  if (!familyCode) {
+  if (!familyId) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center max-w-md">
@@ -555,7 +626,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                   <UserPlus className="h-5 w-5 text-gray-600" />
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Manage Family Members</DialogTitle>
                   <DialogDescription>Add or remove family members who can log activities.</DialogDescription>
@@ -569,7 +640,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-gray-500" />
                             <div>
-                              <span className="font-medium">{member.name}</span>
+                              <span className="text-sm font-medium">{member.name}</span>
                               {member.email && (
                                 <div className="text-xs text-gray-500">{member.email}</div>
                               )}
@@ -591,28 +662,31 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     <h3 className="text-sm font-medium">Add New Member</h3>
                     <div className="space-y-2">
                       <div>
-                        <Label htmlFor="memberName">Name *</Label>
+                        <Label htmlFor="memberName" className="text-xs">Name *</Label>
                         <Input
                           id="memberName"
                           placeholder="Enter name"
                           value={newMemberName}
                           onChange={(e) => setNewMemberName(e.target.value)}
+                          className="text-sm"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="memberEmail">Email (optional)</Label>
+                        <Label htmlFor="memberEmail" className="text-xs">Email (optional)</Label>
                         <Input
                           id="memberEmail"
                           type="email"
                           placeholder="Enter email"
                           value={newMemberEmail}
                           onChange={(e) => setNewMemberEmail(e.target.value)}
+                          className="text-sm"
                         />
                       </div>
                       <Button
                         onClick={addFamilyMember}
                         disabled={addingMember || !newMemberName.trim()}
                         className="w-full"
+                        size="sm"
                       >
                         {addingMember ? (
                           <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
@@ -622,21 +696,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       </Button>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Family Code</h3>
-                    <p className="text-sm text-gray-500">
-                      Share this code with others so they can join your family:
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Input value={familyCode} readOnly className="font-mono" />
-                      <Button onClick={copyFamilyCode} className="shrink-0">
-                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
                 </div>
                 <DialogFooter>
-                  <Button onClick={() => setShowFamilyDialog(false)}>Done</Button>
+                  <Button onClick={() => setShowFamilyDialog(false)} size="sm">Done</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -689,41 +751,63 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </h1>
         </div>
 
+        {/* Daily Summary */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="h-4 w-4 text-gray-600" />
+            <h2 className="text-sm font-medium text-gray-600">Today's Summary</h2>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="text-lg font-bold text-yellow-600">{dailySummary.totalPee}</div>
+              <div className="text-xs text-gray-500">Pee</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-amber-700">{dailySummary.totalPoop}</div>
+              <div className="text-xs text-gray-500">Poop</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-teal-600">{dailySummary.totalFood}g</div>
+              <div className="text-xs text-gray-500">Food</div>
+            </div>
+          </div>
+        </div>
+
         {/* Log Activity Card */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-base text-gray-600 mb-6">Log Activity</h2>
 
-          {/* Activity Type Buttons */}
+          {/* Activity Type Buttons - Multiple Selection */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <button
-              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
-                selectedActivity === "pee"
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border transition-colors ${
+                selectedActivities.has("pee")
                   ? "bg-yellow-500 text-white border-yellow-500"
                   : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
-              onClick={() => setSelectedActivity("pee")}
+              onClick={() => toggleActivity("pee")}
             >
               <Droplets className="h-6 w-6" />
               <span className="text-sm">Pee</span>
             </button>
             <button
-              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
-                selectedActivity === "poop"
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border transition-colors ${
+                selectedActivities.has("poop")
                   ? "bg-amber-700 text-white border-amber-700"
                   : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
-              onClick={() => setSelectedActivity("poop")}
+              onClick={() => toggleActivity("poop")}
             >
               <Waves className="h-6 w-6" />
               <span className="text-sm">Poop</span>
             </button>
             <button
-              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border ${
-                selectedActivity === "food"
+              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border transition-colors ${
+                selectedActivities.has("food")
                   ? "bg-teal-500 text-white border-teal-500"
                   : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               }`}
-              onClick={() => setSelectedActivity("food")}
+              onClick={() => toggleActivity("food")}
             >
               <Utensils className="h-6 w-6" />
               <span className="text-sm">Food</span>
@@ -760,7 +844,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </div>
 
           {/* Amount - Only for food */}
-          {selectedActivity === "food" && (
+          {selectedActivities.has("food") && (
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Utensils className="h-4 w-4" />
@@ -771,7 +855,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 placeholder="Grams"
                 value={amount}
                 onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, ''); // Only allow numbers
+                  const value = e.target.value.replace(/\D/g, '');
                   if (value === '' || (parseInt(value) >= 1 && parseInt(value) <= 200)) {
                     setAmount(value);
                   }
@@ -803,10 +887,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
           {/* Log Button */}
           <Button
             className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3"
-            onClick={handleLogActivity}
+            onClick={handleLogActivities}
             disabled={selectedDate > new Date() || saving}
           >
-            {saving ? "Saving..." : selectedDate > new Date() ? "Cannot log future activities" : "Log Activity"}
+            {saving ? "Saving..." : selectedDate > new Date() ? "Cannot log future activities" : `Log ${selectedActivities.size > 1 ? 'Activities' : 'Activity'}`}
           </Button>
         </div>
 
@@ -829,21 +913,43 @@ export function DashboardPage({ user }: DashboardPageProps) {
           ) : (
             <div className="space-y-3">
               {entries.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
-                    {getActivityIcon(entry.type)}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm text-gray-600">
-                      {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                <div key={entry.id} className="relative overflow-hidden">
+                  <div
+                    ref={(el) => swipeRefs.current[entry.id] = el}
+                    className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ${
+                      swipedEntryId === entry.id ? 'translate-x-[-80px]' : 'translate-x-0'
+                    }`}
+                    onTouchStart={(e) => handleTouchStart(e, entry.id)}
+                    onTouchMove={(e) => handleTouchMove(e, entry.id)}
+                    onTouchEnd={() => handleTouchEnd(entry.id)}
+                  >
+                    <div className={`p-2 rounded-full ${getActivityColor(entry.type)}`}>
+                      {getActivityIcon(entry.type)}
                     </div>
-                    <div className="text-xs text-gray-600">By {entry.addedBy}</div>
-                    {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
-                    {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                    <div className="flex-1">
+                      <div className="text-sm text-gray-600">
+                        {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
+                      </div>
+                      <div className="text-xs text-gray-600">By {entry.addedBy}</div>
+                      {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
+                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-600">{format(entry.timestamp, "h:mm a")}</div>
-                  </div>
+                  
+                  {/* Delete button revealed on swipe */}
+                  {swipedEntryId === entry.id && (
+                    <div className="absolute right-0 top-0 h-full flex items-center">
+                      <Button
+                        onClick={() => deleteEntry(entry.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white h-full px-6 rounded-l-none"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
