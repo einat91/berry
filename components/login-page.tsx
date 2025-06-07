@@ -137,6 +137,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       console.log("🤝 Joining family:", familyData.dogName)
       console.log("🏠 Original family ID:", originalFamilyId)
       
+      // Extract first name from Google display name
+      const firstName = displayName.split(' ')[0]
+      console.log("👤 Using first name:", firstName)
+      
       // Check if user already exists in family members and update/add accordingly
       let updatedFamilyMembers = [...familyData.familyMembers]
       const userEmail = user.email.toLowerCase().trim()
@@ -150,19 +154,19 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       })
       
       if (existingMemberIndex >= 0) {
-        // Update existing member with Google display name
+        // Update existing member with first name only
         updatedFamilyMembers[existingMemberIndex] = {
-          name: displayName,
+          name: firstName,
           email: user.email
         }
-        console.log("👥 Updated existing family member:", displayName)
+        console.log("👥 Updated existing family member:", firstName)
       } else {
-        // Add new member
+        // Add new member with first name only
         updatedFamilyMembers.push({
-          name: displayName,
+          name: firstName,
           email: user.email
         })
-        console.log("👥 Added new family member:", displayName)
+        console.log("👥 Added new family member:", firstName)
       }
       
       // Update the original family document
@@ -173,11 +177,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       // Create user's document that points to the original family
       const userDocRef = doc(db, "users", user.uid)
       await setDoc(userDocRef, {
-        name: displayName,
+        name: firstName, // Store first name only
         email: user.email,
         dogName: familyData.dogName,
         familyMembers: updatedFamilyMembers,
-        originalFamilyId: originalFamilyId, // Reference to the main family
+        originalFamilyId: originalFamilyId,
         createdAt: new Date(),
       })
       
@@ -196,11 +200,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       
       console.log("🆕 Creating new family for:", dogName)
       
+      // Extract first name from display name
+      const firstName = displayName.split(' ')[0]
+      console.log("👤 Using first name:", firstName)
+      
       const userData = {
-        name: displayName,
+        name: firstName, // Store first name only
         email: user.email,
         dogName: dogName.trim(),
-        familyMembers: [{ name: displayName, email: user.email }],
+        familyMembers: [{ name: firstName, email: user.email }], // First name in members
         createdAt: new Date(),
       }
 
@@ -282,11 +290,20 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       console.log("📧 User email:", user.email)
       console.log("👤 Display name:", user.displayName)
 
-      const displayName = isSignup || isJoining ? name.trim() : (user.displayName || "Dog Parent")
+      // Always use first name only for consistency
+      let firstName = ""
+      if (isSignup || isJoining) {
+        firstName = name.trim()
+      } else {
+        // Extract first name from Google display name
+        firstName = user.displayName ? user.displayName.split(' ')[0] : "User"
+      }
+      
+      console.log("👤 Using first name:", firstName)
 
       const loggedInUser: User = {
         id: user.uid,
-        name: displayName,
+        name: firstName, // Always first name only
         email: user.email,
         avatar: user.photoURL || "/placeholder.svg",
       }
@@ -297,7 +314,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       
       if (familyDoc) {
         // Found existing family - join it
-        const familyData = await joinExistingFamily(familyDoc, user, displayName, db)
+        const familyData = await joinExistingFamily(familyDoc, user, firstName, db)
         
         toast({
           title: "Welcome to the Family!",
@@ -314,7 +331,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       if (isSignup) {
         // Create new family
         console.log("🆕 User wants to create new family")
-        const familyData = await createNewFamily(user, displayName, dogName, db)
+        const familyData = await createNewFamily(user, firstName, dogName, db)
         
         toast({
           title: "Welcome to Berry!",
