@@ -631,6 +631,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => window.location.reload()}>
+              <RefreshCw className="h-5 w-5 text-gray-600" />
+            </Button>
             <Dialog open={showFamilyDialog} onOpenChange={setShowFamilyDialog}>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -713,9 +716,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            <Button variant="ghost" size="icon" onClick={() => window.location.reload()}>
-              <RefreshCw className="h-5 w-5 text-gray-600" />
-            </Button>
             <Button variant="ghost" size="icon" onClick={handleSignOut}>
               <Image
                 src={user.avatar || "/placeholder.svg"}
