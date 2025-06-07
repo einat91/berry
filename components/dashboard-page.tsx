@@ -188,8 +188,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
         })
         
         setFamilyMembers(formattedMembers)
-        // Use the user's document ID as the family identifier
-        setFamilyId(userDocSnap.id || user.id)
+        
+        // Use originalFamilyId if it exists (for joined families), otherwise use user's document ID
+        const familyIdentifier = userData.originalFamilyId || userDocSnap.id || user.id
+        console.log("🏠 Using family ID for activities:", familyIdentifier)
+        setFamilyId(familyIdentifier)
       } else {
         toast({
           title: "Setup Required",
