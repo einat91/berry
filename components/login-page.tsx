@@ -130,26 +130,45 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   const joinExistingFamily = async (familyDoc: any, user: any, displayName: string, db: any) => {
     try {
-      const { doc, setDoc, updateDoc, arrayUnion } = await import("firebase/firestore")
+      const { doc, setDoc, updateDoc } = await import("firebase/firestore")
       
       const familyData = familyDoc.data()
       const originalFamilyId = familyDoc.id
       console.log("🤝 Joining family:", familyData.dogName)
       console.log("🏠 Original family ID:", originalFamilyId)
       
-      // Add this user to the original family's member list if not already there
-      const newMember = { name: displayName, email: user.email }
-      const isAlreadyMember = familyData.familyMembers.some((member: any) => {
-        if (typeof member === 'string') return member.toLowerCase() === user.email.toLowerCase()
-        return member.email && member.email.toLowerCase() === user.email.toLowerCase()
+      // Check if user already exists in family members and update/add accordingly
+      let updatedFamilyMembers = [...familyData.familyMembers]
+      const userEmail = user.email.toLowerCase().trim()
+      
+      // Find existing member by email
+      const existingMemberIndex = updatedFamilyMembers.findIndex((member: any) => {
+        if (typeof member === 'string') {
+          return member.toLowerCase().trim() === userEmail
+        }
+        return member.email && member.email.toLowerCase().trim() === userEmail
       })
       
-      if (!isAlreadyMember) {
-        await updateDoc(familyDoc.ref, {
-          familyMembers: arrayUnion(newMember)
+      if (existingMemberIndex >= 0) {
+        // Update existing member with Google display name
+        updatedFamilyMembers[existingMemberIndex] = {
+          name: displayName,
+          email: user.email
+        }
+        console.log("👥 Updated existing family member:", displayName)
+      } else {
+        // Add new member
+        updatedFamilyMembers.push({
+          name: displayName,
+          email: user.email
         })
-        console.log("👥 Added to family members list")
+        console.log("👥 Added new family member:", displayName)
       }
+      
+      // Update the original family document
+      await updateDoc(familyDoc.ref, {
+        familyMembers: updatedFamilyMembers
+      })
       
       // Create user's document that points to the original family
       const userDocRef = doc(db, "users", user.uid)
@@ -157,13 +176,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         name: displayName,
         email: user.email,
         dogName: familyData.dogName,
-        familyMembers: [...familyData.familyMembers, newMember],
+        familyMembers: updatedFamilyMembers,
         originalFamilyId: originalFamilyId, // Reference to the main family
         createdAt: new Date(),
       })
       
       console.log("✅ Successfully joined family with shared activity log!")
-      return { ...familyData, originalFamilyId }
+      return { ...familyData, familyMembers: updatedFamilyMembers, originalFamilyId }
       
     } catch (error) {
       console.error("❌ Error joining family:", error)
