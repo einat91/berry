@@ -74,6 +74,11 @@ interface DashboardPageProps {
 // Food amount options
 const FOOD_AMOUNTS = [25, 50, 75, 100, 125, 150, 175, 200]
 
+// Helper function to ensure only first name is displayed
+const getFirstName = (name: string) => {
+  return name ? name.split(' ')[0] : name
+}
+
 export function DashboardPage({ user }: DashboardPageProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [entries, setEntries] = useState<Entry[]>([])
@@ -93,6 +98,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [amount, setAmount] = useState("50") // Default to 50g
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
   const [dailySummary, setDailySummary] = useState<DailySummary>({ totalPee: 0, totalPoop: 0, totalFood: 0 })
+  const [loggingOut, setLoggingOut] = useState(false)
   const { toast } = useToast()
 
   // Touch handling for swipe to delete
@@ -114,7 +120,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   useEffect(() => {
     if (familyMembers.length > 0 && !selectedMember) {
-      setSelectedMember(familyMembers[0]?.name || "")
+      setSelectedMember(getFirstName(familyMembers[0]?.name || ""))
     }
   }, [familyMembers])
 
@@ -275,7 +281,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const entryData = {
         type: entry.type,
         timestamp: Timestamp.fromDate(entry.timestamp),
-        addedBy: entry.addedBy,
+        addedBy: getFirstName(entry.addedBy),
         userId: user.id,
         familyId: familyId,
         date: dateKey,
@@ -489,11 +495,23 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const handleSignOut = async () => {
     try {
+      setLoggingOut(true)
+      toast({
+        title: "Logging out...",
+        description: "Please wait while we sign you out.",
+      })
       const auth: any = await getAuth()
       const { signOut } = await import("firebase/auth")
       await signOut(auth)
     } catch (error) {
       console.error("Error signing out:", error)
+      toast({
+        title: "Sign Out Error",
+        description: "Could not sign out. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoggingOut(false)
     }
   }
 
@@ -526,7 +544,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       const userDocRef = doc(db, "users", user.id)
       const newMember = {
-        name: newMemberName.trim(),
+        name: getFirstName(newMemberName.trim()),
         ...(newMemberEmail.trim() && { email: newMemberEmail.trim() })
       }
 
@@ -540,7 +558,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       toast({
         title: "Family Member Added",
-        description: `${newMemberName.trim()} has been added to your family.`,
+        description: `${getFirstName(newMemberName.trim())} has been added to your family.`,
       })
     } catch (error) {
       console.error("Error adding family member:", error)
@@ -581,7 +599,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       toast({
         title: "Family Member Removed",
-        description: `${memberToRemove.name} has been removed from your family.`,
+        description: `${getFirstName(memberToRemove.name)} has been removed from your family.`,
       })
     } catch (error) {
       console.error("Error removing family member:", error)
@@ -654,7 +672,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-gray-500" />
                             <div>
-                              <span className="text-sm font-medium">{member.name}</span>
+                              <span className="text-sm font-medium">{getFirstName(member.name)}</span>
                               {member.email && (
                                 <div className="text-xs text-gray-500">{member.email}</div>
                               )}
@@ -716,14 +734,18 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            <Button variant="ghost" size="icon" onClick={handleSignOut}>
-              <Image
-                src={user.avatar || "/placeholder.svg"}
-                alt={user.name}
-                width={32}
-                height={32}
-                className="rounded-full"
-              />
+            <Button variant="ghost" size="icon" onClick={handleSignOut} disabled={loggingOut}>
+              {loggingOut ? (
+                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-gray-300"></div>
+              ) : (
+                <Image
+                  src={user.avatar || "/placeholder.svg"}
+                  alt={user.name}
+                  width={32}
+                  height={32}
+                  className="rounded-full"
+                />
+              )}
             </Button>
           </div>
         </div>
@@ -848,8 +870,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 </SelectTrigger>
                 <SelectContent>
                   {familyMembers.map((member, index) => (
-                    <SelectItem key={`${member.name}-${index}`} value={member.name}>
-                      {member.name}
+                    <SelectItem key={`${member.name}-${index}`} value={getFirstName(member.name)}>
+                      {getFirstName(member.name)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -939,7 +961,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       <div className="text-sm text-gray-600">
                         {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
                       </div>
-                      <div className="text-xs text-gray-600">By {entry.addedBy}</div>
+                      <div className="text-xs text-gray-600">By {getFirstName(entry.addedBy)}</div>
                       {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
