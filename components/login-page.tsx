@@ -130,23 +130,40 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
   const joinExistingFamily = async (familyDoc: any, user: any, displayName: string, db: any) => {
     try {
-      const { doc, setDoc } = await import("firebase/firestore")
+      const { doc, setDoc, updateDoc, arrayUnion } = await import("firebase/firestore")
       
       const familyData = familyDoc.data()
+      const originalFamilyId = familyDoc.id
       console.log("🤝 Joining family:", familyData.dogName)
+      console.log("🏠 Original family ID:", originalFamilyId)
       
-      // Create/update user's document with family data
+      // Add this user to the original family's member list if not already there
+      const newMember = { name: displayName, email: user.email }
+      const isAlreadyMember = familyData.familyMembers.some((member: any) => {
+        if (typeof member === 'string') return member.toLowerCase() === user.email.toLowerCase()
+        return member.email && member.email.toLowerCase() === user.email.toLowerCase()
+      })
+      
+      if (!isAlreadyMember) {
+        await updateDoc(familyDoc.ref, {
+          familyMembers: arrayUnion(newMember)
+        })
+        console.log("👥 Added to family members list")
+      }
+      
+      // Create user's document that points to the original family
       const userDocRef = doc(db, "users", user.uid)
       await setDoc(userDocRef, {
         name: displayName,
         email: user.email,
         dogName: familyData.dogName,
-        familyMembers: familyData.familyMembers,
+        familyMembers: [...familyData.familyMembers, newMember],
+        originalFamilyId: originalFamilyId, // Reference to the main family
         createdAt: new Date(),
       })
       
-      console.log("✅ Successfully joined family!")
-      return familyData
+      console.log("✅ Successfully joined family with shared activity log!")
+      return { ...familyData, originalFamilyId }
       
     } catch (error) {
       console.error("❌ Error joining family:", error)
