@@ -64,77 +64,119 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  const findUserInFamily = async (userEmail: string, db: any) => {
+  // Simple, reliable email-based family search
+  const findFamilyByEmail = async (userEmail: string, db: any) => {
     try {
-      const { collection, query, where, getDocs } = await import("firebase/firestore")
+      const { collection, getDocs } = await import("firebase/firestore")
       
-      console.log("Searching for user email:", userEmail)
+      console.log("🔍 Searching for email in families:", userEmail)
       
       if (!userEmail) return null
 
       const searchEmail = userEmail.toLowerCase().trim()
+      console.log("📧 Normalized search email:", searchEmail)
       
-      // Use array-contains query to find families where this email exists in familyMembers
+      // Get all family documents
       const usersRef = collection(db, "users")
+      const snapshot = await getDocs(usersRef)
       
-      // First try: search by familyMembers array containing email directly
-      const emailQuery = query(
-        usersRef, 
-        where("familyMembers", "array-contains", { name: "Or", email: searchEmail })
-      )
+      console.log("📂 Total families to check:", snapshot.docs.length)
       
-      let querySnapshot = await getDocs(emailQuery)
-      
-      if (!querySnapshot.empty) {
-        console.log("Found family with exact member match")
-        return querySnapshot.docs[0]
-      }
-      
-      // Second try: search by familyMembers array containing email string
-      const emailStringQuery = query(
-        usersRef, 
-        where("familyMembers", "array-contains", searchEmail)
-      )
-      
-      querySnapshot = await getDocs(emailStringQuery)
-      
-      if (!querySnapshot.empty) {
-        console.log("Found family with email string match")
-        return querySnapshot.docs[0]
-      }
-      
-      // Third try: manual search through all documents (fallback)
-      console.log("Trying manual search...")
-      const allDocsSnapshot = await getDocs(usersRef)
-      
-      for (const docSnap of allDocsSnapshot.docs) {
-        const data = docSnap.data()
+      // Check each family document
+      for (const familyDoc of snapshot.docs) {
+        const familyData = familyDoc.data()
         
-        if (!data.familyMembers || !Array.isArray(data.familyMembers)) continue
+        // Skip if not a family document
+        if (!familyData.dogName || !familyData.familyMembers) {
+          continue
+        }
         
-        // Check each member
-        for (const member of data.familyMembers) {
+        console.log(`\n🏠 Checking family: ${familyData.dogName}`)
+        console.log("👥 Family members:", familyData.familyMembers)
+        
+        // Check each family member
+        for (const member of familyData.familyMembers) {
           let memberEmail = null
           
+          // Handle different formats
           if (typeof member === 'string') {
             memberEmail = member
           } else if (member && member.email) {
             memberEmail = member.email
           }
           
-          if (memberEmail && memberEmail.toLowerCase().trim() === searchEmail) {
-            console.log("Found family with manual search")
-            return docSnap
+          if (memberEmail) {
+            const cleanMemberEmail = memberEmail.toLowerCase().trim()
+            console.log(`   🔍 Comparing: "${searchEmail}" === "${cleanMemberEmail}"`)
+            
+            if (searchEmail === cleanMemberEmail) {
+              console.log("✅ FAMILY FOUND!")
+              console.log("🎯 Family:", familyData.dogName)
+              console.log("👤 Matched member:", member)
+              return familyDoc
+            }
           }
         }
       }
       
-      console.log("No family found for email:", searchEmail)
+      console.log("❌ No family found for email:", searchEmail)
       return null
       
     } catch (error) {
-      console.error("Family search error:", error)
+      console.error("❌ Error searching families:", error)
       return null
+    }
+  }
+
+  const joinExistingFamily = async (familyDoc: any, user: any, displayName: string, db: any) => {
+    try {
+      const { doc, setDoc } = await import("firebase/firestore")
+      
+      const familyData = familyDoc.data()
+      console.log("🤝 Joining family:", familyData.dogName)
+      
+      // Create/update user's document with family data
+      const userDocRef = doc(db, "users", user.uid)
+      await setDoc(userDocRef, {
+        name: displayName,
+        email: user.email,
+        dogName: familyData.dogName,
+        familyMembers: familyData.familyMembers,
+        createdAt: new Date(),
+      })
+      
+      console.log("✅ Successfully joined family!")
+      return familyData
+      
+    } catch (error) {
+      console.error("❌ Error joining family:", error)
+      throw error
+    }
+  }
+
+  const createNewFamily = async (user: any, displayName: string, dogName: string, db: any) => {
+    try {
+      const { doc, setDoc } = await import("firebase/firestore")
+      
+      console.log("🆕 Creating new family for:", dogName)
+      
+      const userData = {
+        name: displayName,
+        email: user.email,
+        dogName: dogName.trim(),
+        familyMembers: [{ name: displayName, email: user.email }],
+        createdAt: new Date(),
+      }
+
+      const userDocRef = doc(db, "users", user.uid)
+      await setDoc(userDocRef, userData)
+      
+      console.log("✅ New family created!")
+      return userData
+      
+    } catch (error) {
+      console.error("❌ Error creating family:", error)
+      throw error
     }
   }
 
@@ -191,16 +233,18 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       const db: any = await getDb()
 
       const { signInWithPopup } = await import("firebase/auth")
-      const { doc, getDoc, setDoc, updateDoc, arrayUnion } = await import("firebase/firestore")
 
+      console.log("🚀 Starting Google authentication...")
       const result = await signInWithPopup(auth, provider)
       const user = result.user
 
       if (!user || !user.email) {
-        throw new Error("No user email from Google")
+        throw new Error("No email from Google authentication")
       }
 
-      console.log("Google login success - Email:", user.email)
+      console.log("✅ Google authentication successful")
+      console.log("📧 User email:", user.email)
+      console.log("👤 Display name:", user.displayName)
 
       const displayName = isSignup || isJoining ? name.trim() : (user.displayName || "Dog Parent")
 
@@ -211,32 +255,34 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         avatar: user.photoURL || "/placeholder.svg",
       }
 
-      // Check if user already has their own family setup
-      const userDocRef = doc(db, "users", user.uid)
-      const userDoc = await getDoc(userDocRef)
-
-      if (userDoc.exists() && userDoc.data()?.dogName && !isJoining) {
-        console.log("User already has family")
+      // STEP 1: Always search for existing family membership first
+      console.log("\n🔍 STEP 1: Searching for existing family...")
+      const familyDoc = await findFamilyByEmail(user.email, db)
+      
+      if (familyDoc) {
+        // Found existing family - join it
+        const familyData = await joinExistingFamily(familyDoc, user, displayName, db)
+        
+        toast({
+          title: "Welcome to the Family!",
+          description: `Joined ${familyData.dogName}'s family successfully!`,
+        })
+        
         onLogin(loggedInUser)
         return
       }
 
-      if (isSignup) {
-        console.log("Creating new family")
-        
-        const userData = {
-          name: displayName,
-          email: user.email,
-          dogName: dogName.trim(),
-          familyMembers: [{ name: displayName, email: user.email }],
-          createdAt: new Date(),
-        }
+      // STEP 2: No existing family found
+      console.log("\n❌ No existing family found")
 
-        await setDoc(userDocRef, userData)
+      if (isSignup) {
+        // Create new family
+        console.log("🆕 User wants to create new family")
+        const familyData = await createNewFamily(user, displayName, dogName, db)
         
         toast({
           title: "Welcome to Berry!",
-          description: `Family created for ${dogName}!`,
+          description: `Family created for ${familyData.dogName}!`,
         })
         
         onLogin(loggedInUser)
@@ -244,78 +290,23 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       }
 
       if (isJoining) {
-        console.log("Trying to join existing family")
-        
-        const familyDoc = await findUserInFamily(user.email, db)
-
-        if (!familyDoc) {
-          toast({
-            title: "No Family Found",
-            description: "Could not find a family with your email address.",
-            variant: "destructive",
-          })
-          setLoading(false)
-          return
-        }
-
-        const familyData = familyDoc.data()
-        console.log("Found family:", familyData.dogName)
-        
-        // Add to family members if not already there
-        const newMember = { name: displayName, email: user.email }
-        await updateDoc(doc(db, "users", familyDoc.id), {
-          familyMembers: arrayUnion(newMember)
-        })
-
-        // Create user's own document
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: user.email,
-          dogName: familyData.dogName,
-          familyMembers: [...(familyData.familyMembers || []), newMember],
-          createdAt: new Date(),
-        })
-
+        // Tried to join but no family found
         toast({
-          title: "Welcome to the Family!",
-          description: `Joined ${familyData.dogName}'s family!`,
+          title: "No Family Found",
+          description: "Could not find a family with your email address.",
+          variant: "destructive",
         })
-        
-        onLogin(loggedInUser)
+        setLoading(false)
         return
       }
 
-      // Regular login - search for existing family
-      console.log("Regular login - searching for family")
-      
-      const familyDoc = await findUserInFamily(user.email, db)
-      
-      if (familyDoc) {
-        console.log("Found existing family - auto joining")
-        const familyData = familyDoc.data()
-        
-        await setDoc(userDocRef, {
-          name: displayName,
-          email: user.email,
-          dogName: familyData.dogName,
-          familyMembers: familyData.familyMembers,
-          createdAt: new Date(),
-        })
-        
-        toast({
-          title: "Welcome Back!",
-          description: `Joined ${familyData.dogName}'s family!`,
-        })
-        
-        onLogin(loggedInUser)
-      } else {
-        console.log("No family found - showing options")
-        setShowJoinForm(true)
-        setLoading(false)
-      }
+      // Regular login with no family found - show options
+      console.log("❓ Regular login but no family found - showing options")
+      setShowJoinForm(true)
+      setLoading(false)
 
     } catch (err: any) {
-      console.error("Login error:", err)
+      console.error("❌ Login error:", err)
       
       if (err.code === "auth/popup-closed-by-user") {
         toast({
@@ -323,10 +314,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           description: "Please try logging in again.",
         })
       } else {
-        setShowJoinForm(true)
         toast({
-          title: "Login Issue",
-          description: "Let's help you get set up.",
+          title: "Login Error",
+          description: err.message || "Something went wrong. Please try again.",
+          variant: "destructive",
         })
       }
     } finally {
@@ -359,7 +350,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </Button>
             </div>
             <CardTitle className="text-2xl font-bold">Join or Create Family</CardTitle>
-            <CardDescription>We'll help you join the family or create a new one.</CardDescription>
+            <CardDescription>We didn't find an existing family for your email.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -390,6 +381,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 >
                   Create New Family
                 </Button>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-xs text-blue-700 text-center">
+                  💡 If you can't join, the family admin may need to add your email address to the family first.
+                </p>
               </div>
             </div>
           </CardContent>
@@ -429,7 +426,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   </Button>
 
                   <p className="text-xs text-center text-gray-600 mt-4">
-                    Will automatically find your family or guide you to join one
+                    Will automatically find your family based on your email address
                   </p>
                 </div>
               </TabsContent>
