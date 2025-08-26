@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,10 +17,10 @@ import {
   PawPrint,
   UserPlus,
   X,
+  AlertCircle,
   Trash2,
   TrendingUp,
   RefreshCw,
-  Candy,
 } from "lucide-react"
 import { format, addDays, subDays, isToday } from "date-fns"
 import Image from "next/image"
@@ -39,23 +37,16 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 
-interface User {
+interface UserType {
   id: string
   name: string
   email: string
   avatar: string
 }
 
-interface LoginPageProps {
-  onLogin: (user: User) => void
-}
-
-// Define activity types
-type ActivityType = "pee" | "poop" | "food" | "medicine" | "treat"
-
 interface Entry {
   id: string
-  type: ActivityType
+  type: "pee" | "poop" | "food"
   timestamp: Date
   notes?: string
   addedBy: string
@@ -74,12 +65,10 @@ interface DailySummary {
   totalPee: number
   totalPoop: number
   totalFood: number
-  totalMedicine: number
-  totalTreat: number
 }
 
 interface DashboardPageProps {
-  user: any // Declare UserType here or import it
+  user: UserType
 }
 
 // Food amount options
@@ -87,7 +76,7 @@ const FOOD_AMOUNTS = [25, 50, 75, 100, 125, 150, 175, 200]
 
 // Helper function to ensure only first name is displayed
 const getFirstName = (name: string) => {
-  return name ? name.split(" ")[0] : name
+  return name ? name.split(' ')[0] : name
 }
 
 export function DashboardPage({ user }: DashboardPageProps) {
@@ -96,7 +85,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [dogName, setDogName] = useState("")
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
   const [familyId, setFamilyId] = useState("")
-  const [selectedActivities, setSelectedActivities] = useState<Set<ActivityType>>(new Set())
+  const [selectedActivities, setSelectedActivities] = useState<Set<"pee" | "poop" | "food">>(new Set())
   const [selectedTime, setSelectedTime] = useState(format(new Date(), "HH:mm"))
   const [selectedMember, setSelectedMember] = useState("")
   const [note, setNote] = useState("")
@@ -108,16 +97,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [addingMember, setAddingMember] = useState(false)
   const [amount, setAmount] = useState("50") // Default to 50g
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
-  const [dailySummary, setDailySummary] = useState<DailySummary>({
-    totalPee: 0,
-    totalPoop: 0,
-    totalFood: 0,
-    totalMedicine: 0,
-    totalTreat: 0,
-  })
+  const [dailySummary, setDailySummary] = useState<DailySummary>({ totalPee: 0, totalPoop: 0, totalFood: 0 })
+  const [loggingOut, setLoggingOut] = useState(false)
   const { toast } = useToast()
-
-  const [loggingOut, setLoggingOut] = useState(false) // Declare loggingOut here
 
   // Touch handling for swipe to delete
   const [touchStart, setTouchStart] = useState<number | null>(null)
@@ -157,19 +139,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
             acc.totalPoop += 1
             break
           case "food":
-            const grams = entry.amount ? Number.parseInt(entry.amount.replace("g", "")) || 0 : 0
+            const grams = entry.amount ? parseInt(entry.amount.replace('g', '')) || 0 : 0
             acc.totalFood += grams
-            break
-          case "medicine":
-            acc.totalMedicine += 1
-            break
-          case "treat":
-            acc.totalTreat += 1
             break
         }
         return acc
       },
-      { totalPee: 0, totalPoop: 0, totalFood: 0, totalMedicine: 0, totalTreat: 0 },
+      { totalPee: 0, totalPoop: 0, totalFood: 0 }
     )
     setDailySummary(summary)
   }
@@ -183,7 +159,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const userDocSnap = await getDoc(userDocRef)
 
       let userData = null
-
+      
       if (userDocSnap.exists()) {
         userData = userDocSnap.data()
       } else {
@@ -194,7 +170,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         if (!querySnapshot.empty) {
           const familyDoc = querySnapshot.docs[0]
           userData = familyDoc.data()
-
+          
           const { setDoc } = await import("firebase/firestore")
           await setDoc(userDocRef, {
             name: user.name,
@@ -209,17 +185,17 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       if (userData) {
         setDogName(userData.dogName || "")
-
+        
         const members = userData.familyMembers || [user.name]
         const formattedMembers = members.map((member: any) => {
-          if (typeof member === "string") {
+          if (typeof member === 'string') {
             return { name: member }
           }
           return member
         })
-
+        
         setFamilyMembers(formattedMembers)
-
+        
         // Use originalFamilyId if it exists (for joined families), otherwise use user's document ID
         const familyIdentifier = userData.originalFamilyId || userDocSnap.id || user.id
         console.log("🏠 Using family ID for activities:", familyIdentifier)
@@ -254,7 +230,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
 
-      const q = query(entriesRef, where("familyId", "==", familyId), where("date", "==", dateKey))
+      const q = query(
+        entriesRef,
+        where("familyId", "==", familyId),
+        where("date", "==", dateKey)
+      )
 
       const querySnapshot = await getDocs(q)
       const loadedEntries = querySnapshot.docs.map((doc) => ({
@@ -297,7 +277,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const { collection, addDoc, Timestamp } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
-
+      
       const entryData = {
         type: entry.type,
         timestamp: Timestamp.fromDate(entry.timestamp),
@@ -331,21 +311,22 @@ export function DashboardPage({ user }: DashboardPageProps) {
       })
 
       return true
+      
     } catch (error) {
       console.error("❌ Error saving entry:", error)
-
+      
       let errorMessage = "Failed to save activity. "
-
-      if (error.code === "permission-denied") {
+      
+      if (error.code === 'permission-denied') {
         errorMessage += "Database permission denied. Please check Firebase rules."
-      } else if (error.code === "unavailable") {
+      } else if (error.code === 'unavailable') {
         errorMessage += "Database temporarily unavailable. Please try again."
-      } else if (error.message?.includes("offline")) {
+      } else if (error.message?.includes('offline')) {
         errorMessage += "You're offline. Please check your internet connection."
       } else {
         errorMessage += "Please check your connection and try again."
       }
-
+      
       toast({
         title: "Save Failed",
         description: errorMessage,
@@ -423,9 +404,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
     if (successCount > 0) {
       toast({
         title: "Activities Saved",
-        description: `${successCount} ${successCount === 1 ? "activity" : "activities"} saved successfully!`,
+        description: `${successCount} ${successCount === 1 ? 'activity' : 'activities'} saved successfully!`,
       })
-
+      
       // Reset form
       setSelectedActivities(new Set())
       setAmount("50") // Reset to default
@@ -439,10 +420,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const { doc, deleteDoc } = await import("firebase/firestore")
 
       await deleteDoc(doc(db, "entries", entryId))
-
-      setEntries((prev) => prev.filter((entry) => entry.id !== entryId))
+      
+      setEntries(prev => prev.filter(entry => entry.id !== entryId))
       setSwipedEntryId(null)
-
+      
       toast({
         title: "Activity Deleted",
         description: "Activity has been removed successfully.",
@@ -468,7 +449,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const handleTouchEnd = (entryId: string) => {
     if (!touchStart || !touchEnd) return
-
+    
     const distance = touchStart - touchEnd
     const isLeftSwipe = distance > 50
     const isRightSwipe = distance < -50
@@ -480,7 +461,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
-  const toggleActivity = (activity: "pee" | "poop" | "food" | "medicine" | "treat") => {
+  const toggleActivity = (activity: "pee" | "poop" | "food") => {
     const newActivities = new Set(selectedActivities)
     if (newActivities.has(activity)) {
       newActivities.delete(activity)
@@ -490,7 +471,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     setSelectedActivities(newActivities)
   }
 
-  const getActivityIcon = (type: "pee" | "poop" | "food" | "medicine" | "treat") => {
+  const getActivityIcon = (type: "pee" | "poop" | "food") => {
     switch (type) {
       case "pee":
         return <Droplets className="h-5 w-5" />
@@ -498,14 +479,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
         return <Waves className="h-5 w-5" />
       case "food":
         return <Utensils className="h-5 w-5" />
-      case "medicine":
-        return <таблетки className="h-5 w-5" />
-      case "treat":
-        return <Candy className="h-5 w-5" />
     }
   }
 
-  const getActivityColor = (type: "pee" | "poop" | "food" | "medicine" | "treat") => {
+  const getActivityColor = (type: "pee" | "poop" | "food") => {
     switch (type) {
       case "pee":
         return "bg-yellow-500 text-white"
@@ -513,10 +490,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
         return "bg-amber-700 text-white"
       case "food":
         return "bg-teal-500 text-white"
-      case "medicine":
-        return "bg-purple-500 text-white"
-      case "treat":
-        return "bg-pink-500 text-white"
     }
   }
 
@@ -572,7 +545,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const userDocRef = doc(db, "users", user.id)
       const newMember = {
         name: getFirstName(newMemberName.trim()),
-        ...(newMemberEmail.trim() && { email: newMemberEmail.trim() }),
+        ...(newMemberEmail.trim() && { email: newMemberEmail.trim() })
       }
 
       await updateDoc(userDocRef, {
@@ -614,8 +587,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const { doc, updateDoc } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
-      const updatedMembers = familyMembers.filter(
-        (m) => m.name !== memberToRemove.name || m.email !== memberToRemove.email,
+      const updatedMembers = familyMembers.filter((m) => 
+        m.name !== memberToRemove.name || m.email !== memberToRemove.email
       )
 
       await updateDoc(userDocRef, {
@@ -636,6 +609,33 @@ export function DashboardPage({ user }: DashboardPageProps) {
         variant: "destructive",
       })
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} className="mx-auto mb-4" />
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your family account...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!familyId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Family Setup Required</h2>
+          <p className="text-gray-600 mb-4">
+            Your family account is not properly set up. Please complete the setup process to start tracking activities.
+          </p>
+          <Button onClick={() => window.location.reload()}>Refresh Page</Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -668,15 +668,14 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     <h3 className="text-sm font-medium">Current Family Members</h3>
                     <div className="space-y-2">
                       {familyMembers.map((member, index) => (
-                        <div
-                          key={`${member.name}-${index}`}
-                          className="flex items-center justify-between p-2 bg-gray-50 rounded-md"
-                        >
+                        <div key={`${member.name}-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-gray-500" />
                             <div>
                               <span className="text-sm font-medium">{getFirstName(member.name)}</span>
-                              {member.email && <div className="text-xs text-gray-500">{member.email}</div>}
+                              {member.email && (
+                                <div className="text-xs text-gray-500">{member.email}</div>
+                              )}
                             </div>
                           </div>
                           <Button
@@ -695,9 +694,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     <h3 className="text-sm font-medium">Add New Member</h3>
                     <div className="space-y-2">
                       <div>
-                        <Label htmlFor="memberName" className="text-xs">
-                          Name *
-                        </Label>
+                        <Label htmlFor="memberName" className="text-xs">Name *</Label>
                         <Input
                           id="memberName"
                           placeholder="Enter name"
@@ -707,9 +704,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="memberEmail" className="text-xs">
-                          Email (optional)
-                        </Label>
+                        <Label htmlFor="memberEmail" className="text-xs">Email (optional)</Label>
                         <Input
                           id="memberEmail"
                           type="email"
@@ -735,9 +730,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button onClick={() => setShowFamilyDialog(false)} size="sm">
-                    Done
-                  </Button>
+                  <Button onClick={() => setShowFamilyDialog(false)} size="sm">Done</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -789,7 +782,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
           <div className="flex items-center justify-center gap-2 mb-2">
             <PawPrint className="h-6 w-6 text-gray-600" />
           </div>
-          <h1 className="text-xl font-bold text-gray-700">Welcome, {dogName}'s family!</h1>
+          <h1 className="text-xl font-bold text-gray-700">
+            Welcome, {dogName}'s family!
+          </h1>
         </div>
 
         {/* Daily Summary - Updated with consistent text size */}
@@ -798,7 +793,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <TrendingUp className="h-4 w-4 text-gray-600" />
             <h2 className="text-base text-gray-600">Today's Summary</h2>
           </div>
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
               <div className="text-lg font-bold text-yellow-600">{dailySummary.totalPee}</div>
               <div className="text-xs text-gray-500">Pee</div>
@@ -811,14 +806,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
               <div className="text-lg font-bold text-teal-600">{dailySummary.totalFood}g</div>
               <div className="text-xs text-gray-500">Food</div>
             </div>
-            <div className="text-center">
-              <div className="text-lg font-bold text-purple-600">{dailySummary.totalMedicine}</div>
-              <div className="text-xs text-gray-500">Medicine</div>
-            </div>
-            <div className="text-center">
-              <div className="text-lg font-bold text-pink-600">{dailySummary.totalTreat}</div>
-              <div className="text-xs text-gray-500">Treat</div>
-            </div>
           </div>
         </div>
 
@@ -827,7 +814,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           <h2 className="text-base text-gray-600 mb-6">Log Activity</h2>
 
           {/* Activity Type Buttons - Multiple Selection */}
-          <div className="grid grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-3 gap-4 mb-6">
             <button
               className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border transition-colors ${
                 selectedActivities.has("pee")
@@ -860,28 +847,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
             >
               <Utensils className="h-6 w-6" />
               <span className="text-sm">Food</span>
-            </button>
-            <button
-              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border transition-colors ${
-                selectedActivities.has("medicine")
-                  ? "bg-purple-500 text-white border-purple-500"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-              }`}
-              onClick={() => toggleActivity("medicine")}
-            >
-              <таблетки className="h-6 w-6" />
-              <span className="text-sm">Medicine</span>
-            </button>
-            <button
-              className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border transition-colors ${
-                selectedActivities.has("treat")
-                  ? "bg-pink-500 text-white border-pink-500"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-              }`}
-              onClick={() => toggleActivity("treat")}
-            >
-              <Candy className="h-6 w-6" />
-              <span className="text-sm">Treat</span>
             </button>
           </div>
 
@@ -937,20 +902,18 @@ export function DashboardPage({ user }: DashboardPageProps) {
           )}
 
           {/* Note */}
-          {(selectedActivities.has("medicine") || selectedActivities.has("treat")) && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <FileText className="h-4 w-4" />
-                <span>Note</span>
-              </div>
-              <Input
-                placeholder="Quick note..."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="text-sm"
-              />
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+              <FileText className="h-4 w-4" />
+              <span>Note</span>
             </div>
-          )}
+            <Input
+              placeholder="Quick note..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="text-sm"
+            />
+          </div>
 
           {/* Log Button */}
           <Button
@@ -958,11 +921,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             onClick={handleLogActivities}
             disabled={selectedDate > new Date() || saving}
           >
-            {saving
-              ? "Saving..."
-              : selectedDate > new Date()
-                ? "Cannot log future activities"
-                : `Log ${selectedActivities.size > 1 ? "Activities" : "Activity"}`}
+            {saving ? "Saving..." : selectedDate > new Date() ? "Cannot log future activities" : `Log ${selectedActivities.size > 1 ? 'Activities' : 'Activity'}`}
           </Button>
         </div>
 
@@ -987,9 +946,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
               {entries.map((entry) => (
                 <div key={entry.id} className="relative overflow-hidden">
                   <div
-                    ref={(el) => (swipeRefs.current[entry.id] = el)}
+                    ref={(el) => swipeRefs.current[entry.id] = el}
                     className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ${
-                      swipedEntryId === entry.id ? "translate-x-[-80px]" : "translate-x-0"
+                      swipedEntryId === entry.id ? 'translate-x-[-80px]' : 'translate-x-0'
                     }`}
                     onTouchStart={(e) => handleTouchStart(e, entry.id)}
                     onTouchMove={(e) => handleTouchMove(e, entry.id)}
@@ -1011,7 +970,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
                   </div>
-
+                  
                   {/* Delete button revealed on swipe */}
                   {swipedEntryId === entry.id && (
                     <div className="absolute right-0 top-0 h-full flex items-center">
