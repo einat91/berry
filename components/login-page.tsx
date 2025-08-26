@@ -1,5 +1,7 @@
 "use client"
 
+import { DialogDescription } from "@/components/ui/dialog"
+
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -12,6 +14,7 @@ import { ArrowLeft } from "lucide-react"
 import Image from "next/image"
 import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
 import { useToast } from "@/hooks/use-toast"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface User {
   id: string
@@ -31,6 +34,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [loading, setLoading] = useState(false)
   const [firebaseReady, setFirebaseReady] = useState(false)
   const [showJoinForm, setShowJoinForm] = useState(false)
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -68,47 +72,47 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const findFamilyByEmail = async (userEmail: string, db: any) => {
     try {
       const { collection, getDocs } = await import("firebase/firestore")
-      
+
       console.log("🔍 Searching for email in families:", userEmail)
-      
+
       if (!userEmail) return null
 
       const searchEmail = userEmail.toLowerCase().trim()
       console.log("📧 Normalized search email:", searchEmail)
-      
+
       // Get all family documents
       const usersRef = collection(db, "users")
       const snapshot = await getDocs(usersRef)
-      
+
       console.log("📂 Total families to check:", snapshot.docs.length)
-      
+
       // Check each family document
       for (const familyDoc of snapshot.docs) {
         const familyData = familyDoc.data()
-        
+
         // Skip if not a family document
         if (!familyData.dogName || !familyData.familyMembers) {
           continue
         }
-        
+
         console.log(`\n🏠 Checking family: ${familyData.dogName}`)
         console.log("👥 Family members:", familyData.familyMembers)
-        
+
         // Check each family member
         for (const member of familyData.familyMembers) {
           let memberEmail = null
-          
+
           // Handle different formats
-          if (typeof member === 'string') {
+          if (typeof member === "string") {
             memberEmail = member
           } else if (member && member.email) {
             memberEmail = member.email
           }
-          
+
           if (memberEmail) {
             const cleanMemberEmail = memberEmail.toLowerCase().trim()
             console.log(`   🔍 Comparing: "${searchEmail}" === "${cleanMemberEmail}"`)
-            
+
             if (searchEmail === cleanMemberEmail) {
               console.log("✅ FAMILY FOUND!")
               console.log("🎯 Family:", familyData.dogName)
@@ -118,10 +122,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           }
         }
       }
-      
+
       console.log("❌ No family found for email:", searchEmail)
       return null
-      
     } catch (error) {
       console.error("❌ Error searching families:", error)
       return null
@@ -131,49 +134,49 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const joinExistingFamily = async (familyDoc: any, user: any, displayName: string, db: any) => {
     try {
       const { doc, setDoc, updateDoc } = await import("firebase/firestore")
-      
+
       const familyData = familyDoc.data()
       const originalFamilyId = familyDoc.id
       console.log("🤝 Joining family:", familyData.dogName)
       console.log("🏠 Original family ID:", originalFamilyId)
-      
+
       // Extract first name from Google display name
-      const firstName = displayName.split(' ')[0]
+      const firstName = displayName.split(" ")[0]
       console.log("👤 Using first name:", firstName)
-      
+
       // Check if user already exists in family members and update/add accordingly
-      let updatedFamilyMembers = [...familyData.familyMembers]
+      const updatedFamilyMembers = [...familyData.familyMembers]
       const userEmail = user.email.toLowerCase().trim()
-      
+
       // Find existing member by email
       const existingMemberIndex = updatedFamilyMembers.findIndex((member: any) => {
-        if (typeof member === 'string') {
+        if (typeof member === "string") {
           return member.toLowerCase().trim() === userEmail
         }
         return member.email && member.email.toLowerCase().trim() === userEmail
       })
-      
+
       if (existingMemberIndex >= 0) {
         // Update existing member with first name only
         updatedFamilyMembers[existingMemberIndex] = {
           name: firstName,
-          email: user.email
+          email: user.email,
         }
         console.log("👥 Updated existing family member:", firstName)
       } else {
         // Add new member with first name only
         updatedFamilyMembers.push({
           name: firstName,
-          email: user.email
+          email: user.email,
         })
         console.log("👥 Added new family member:", firstName)
       }
-      
+
       // Update the original family document
       await updateDoc(familyDoc.ref, {
-        familyMembers: updatedFamilyMembers
+        familyMembers: updatedFamilyMembers,
       })
-      
+
       // Create user's document that points to the original family
       const userDocRef = doc(db, "users", user.uid)
       await setDoc(userDocRef, {
@@ -184,10 +187,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         originalFamilyId: originalFamilyId,
         createdAt: new Date(),
       })
-      
+
       console.log("✅ Successfully joined family with shared activity log!")
       return { ...familyData, familyMembers: updatedFamilyMembers, originalFamilyId }
-      
     } catch (error) {
       console.error("❌ Error joining family:", error)
       throw error
@@ -197,13 +199,13 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const createNewFamily = async (user: any, displayName: string, dogName: string, db: any) => {
     try {
       const { doc, setDoc } = await import("firebase/firestore")
-      
+
       console.log("🆕 Creating new family for:", dogName)
-      
+
       // Extract first name from display name
-      const firstName = displayName.split(' ')[0]
+      const firstName = displayName.split(" ")[0]
       console.log("👤 Using first name:", firstName)
-      
+
       const userData = {
         name: firstName, // Store first name only
         email: user.email,
@@ -214,10 +216,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       const userDocRef = doc(db, "users", user.uid)
       await setDoc(userDocRef, userData)
-      
+
       console.log("✅ New family created!")
       return userData
-      
     } catch (error) {
       console.error("❌ Error creating family:", error)
       throw error
@@ -233,16 +234,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       })
       return false
     }
-    
+
     if (!dogName.trim()) {
       toast({
-        title: "Dog's Name Required", 
+        title: "Dog's Name Required",
         description: "Please enter your dog's name",
         variant: "destructive",
       })
       return false
     }
-    
+
     return true
   }
 
@@ -296,9 +297,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         firstName = name.trim()
       } else {
         // Extract first name from Google display name
-        firstName = user.displayName ? user.displayName.split(' ')[0] : "User"
+        firstName = user.displayName ? user.displayName.split(" ")[0] : "User"
       }
-      
+
       console.log("👤 Using first name:", firstName)
 
       const loggedInUser: User = {
@@ -311,16 +312,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       // STEP 1: Always search for existing family membership first
       console.log("\n🔍 STEP 1: Searching for existing family...")
       const familyDoc = await findFamilyByEmail(user.email, db)
-      
+
       if (familyDoc) {
         // Found existing family - join it
         const familyData = await joinExistingFamily(familyDoc, user, firstName, db)
-        
+
         toast({
           title: "Welcome to the Family!",
           description: `Joined ${familyData.dogName}'s family successfully!`,
         })
-        
+
         onLogin(loggedInUser)
         return
       }
@@ -332,12 +333,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         // Create new family
         console.log("🆕 User wants to create new family")
         const familyData = await createNewFamily(user, firstName, dogName, db)
-        
+
         toast({
           title: "Welcome to Berry!",
           description: `Family created for ${familyData.dogName}!`,
         })
-        
+
         onLogin(loggedInUser)
         return
       }
@@ -357,10 +358,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       console.log("❓ Regular login but no family found - showing options")
       setShowJoinForm(true)
       setLoading(false)
-
     } catch (err: any) {
       console.error("❌ Login error:", err)
-      
+
       if (err.code === "auth/popup-closed-by-user") {
         toast({
           title: "Login Cancelled",
@@ -418,20 +418,16 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </div>
 
               <div className="space-y-2">
-                <Button 
-                  onClick={() => handleGoogleLogin(true, false)} 
-                  className="w-full h-12" 
+                <Button
+                  onClick={() => handleGoogleLogin(true, false)}
+                  className="w-full h-12"
                   disabled={loading}
                   variant="outline"
                 >
                   {loading ? "Searching..." : "Try to Join Existing Family"}
                 </Button>
-                
-                <Button 
-                  onClick={handleCreateNewFamily} 
-                  className="w-full h-12" 
-                  disabled={loading}
-                >
+
+                <Button onClick={handleCreateNewFamily} className="w-full h-12" disabled={loading}>
                   Create New Family
                 </Button>
               </div>
@@ -443,6 +439,201 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             </div>
           </CardContent>
+          {/* Privacy Policy Modal */}
+          {showPrivacyPolicy && (
+            <Dialog open={showPrivacyPolicy} onOpenChange={setShowPrivacyPolicy}>
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Privacy Policy of Berry</DialogTitle>
+                  <DialogDescription>
+                    This policy will help you understand what data we collect, why we collect it, and what your rights
+                    are in relation to it.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 text-sm">
+                  <p>
+                    <strong>Latest update:</strong> August 26, 2025
+                  </p>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">Owner and Data Controller</h3>
+                    <p>Einat Ehrlich</p>
+                    <p>Owner contact email: einat91@gmail.com</p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">Types of Data collected</h3>
+                    <p>The owner does not provide a list of Personal Data types collected.</p>
+                    <p>
+                      Complete details on each type of Personal Data collected are provided in the dedicated sections of
+                      this privacy policy or by specific explanation texts displayed prior to the Data collection.
+                    </p>
+                    <p>
+                      Personal Data may be freely provided by the User, or, in case of Usage Data, collected
+                      automatically when using this Application. Unless specified otherwise, all Data requested by this
+                      Application is mandatory and failure to provide this Data may make it impossible for this
+                      Application to provide its services.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">Mode and place of processing the Data</h3>
+                    <h4 className="font-medium mb-1">Methods of processing</h4>
+                    <p>
+                      The Owner takes appropriate security measures to prevent unauthorized access, disclosure,
+                      modification, or unauthorized destruction of the Data.
+                    </p>
+                    <p>
+                      The Data processing is carried out using computers and/or IT enabled tools, following
+                      organizational procedures and modes strictly related to the purposes indicated.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">The purposes of processing</h3>
+                    <p>
+                      Data is processed to provide the dog activity tracking service and maintain user accounts within
+                      family groups.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">Cookie Policy</h3>
+                    <p>This Application uses Trackers. To learn more, Users may consult the Cookie Policy.</p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">Further Information for Users in the European Union</h3>
+                    <h4 className="font-medium mb-1">Legal basis of processing</h4>
+                    <p>The Owner may process Personal Data relating to Users if one of the following applies:</p>
+                    <ul className="list-disc list-inside ml-4 space-y-1">
+                      <li>Users have given their consent for one or more specific purposes.</li>
+                      <li>
+                        Provision of Data is necessary for the performance of an agreement with the User and/or for any
+                        pre-contractual obligations thereof.
+                      </li>
+                      <li>
+                        Processing is necessary for compliance with a legal obligation to which the Owner is subject.
+                      </li>
+                      <li>
+                        Processing is related to a task that is carried out in the public interest or in the exercise of
+                        official authority vested in the Owner.
+                      </li>
+                      <li>
+                        Processing is necessary for the purposes of the legitimate interests pursued by the Owner or by
+                        a third party.
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">
+                      The rights of Users based on the General Data Protection Regulation (GDPR)
+                    </h3>
+                    <p>
+                      Users may exercise certain rights regarding their Data processed by the Owner. In particular,
+                      Users have the right to do the following, to the extent permitted by law:
+                    </p>
+                    <ul className="list-disc list-inside ml-4 space-y-1">
+                      <li>Withdraw their consent at any time.</li>
+                      <li>Object to processing of their Data.</li>
+                      <li>Access their Data.</li>
+                      <li>Verify and seek rectification.</li>
+                      <li>Restrict the processing of their Data.</li>
+                      <li>Have their Personal Data deleted or otherwise removed.</li>
+                      <li>Receive their Data and have it transferred to another controller.</li>
+                      <li>Lodge a complaint.</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">How to exercise these rights</h3>
+                    <p>
+                      Any requests to exercise User rights can be directed to the Owner through the contact details
+                      provided in this document. Such requests are free of charge and will be answered by the Owner as
+                      early as possible and always within one month.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">Additional information about Data collection and processing</h3>
+                    <h4 className="font-medium mb-1">Legal action</h4>
+                    <p>
+                      The User's Personal Data may be used for legal purposes by the Owner in Court or in the stages
+                      leading to possible legal action arising from improper use of this Application or the related
+                      Services.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">System logs and maintenance</h3>
+                    <p>
+                      For operation and maintenance purposes, this Application and any third-party services may collect
+                      files that record interaction with this Application (System logs) or use other Personal Data (such
+                      as the IP Address) for this purpose.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">Changes to this privacy policy</h3>
+                    <p>
+                      The Owner reserves the right to make changes to this privacy policy at any time by notifying its
+                      Users on this page and possibly within this Application.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold mb-2">Definitions and legal references</h3>
+                    <div className="space-y-2">
+                      <div>
+                        <h4 className="font-medium">Personal Data (or Data)</h4>
+                        <p>
+                          Any information that directly, indirectly, or in connection with other information — including
+                          a personal identification number — allows for the identification or identifiability of a
+                          natural person.
+                        </p>
+                      </div>
+                      <div>
+                        <h4 className="font-medium">Usage Data</h4>
+                        <p>
+                          Information collected automatically through this Application, which can include: the IP
+                          addresses or domain names of the computers utilized by the Users who use this Application, the
+                          URI addresses, the time of the request, and other parameters about the device operating system
+                          and/or the User's IT environment.
+                        </p>
+                      </div>
+                      <div>
+                        <h4 className="font-medium">User</h4>
+                        <p>
+                          The individual using this Application who, unless otherwise specified, coincides with the Data
+                          Subject.
+                        </p>
+                      </div>
+                      <div>
+                        <h4 className="font-medium">Data Controller (or Owner)</h4>
+                        <p>
+                          The natural or legal person, public authority, agency or other body which, alone or jointly
+                          with others, determines the purposes and means of the processing of Personal Data, including
+                          the security measures concerning the operation and use of this Application.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h3 className="font-semibold mb-2">Contact Information</h3>
+                    <p>Berry</p>
+                    <p>Einat Ehrlich</p>
+                    <p>Owner contact email: einat91@gmail.com</p>
+                    <p className="text-xs text-gray-500 mt-2">Latest update: August 26, 2025</p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={() => setShowPrivacyPolicy(false)}>Close</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </Card>
       </div>
     )
@@ -511,14 +702,216 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     {loading ? "Creating family..." : "Sign up with Google"}
                   </Button>
 
-                  <p className="text-xs text-center text-gray-600 mt-4">
-                    Creates a new family account for your dog
-                  </p>
+                  <p className="text-xs text-center text-gray-600 mt-4">Creates a new family account for your dog</p>
                 </div>
               </TabsContent>
             </Tabs>
           )}
+          {/* Privacy Policy Link */}
+          <div className="text-center mt-6">
+            <button
+              onClick={() => setShowPrivacyPolicy(true)}
+              className="text-xs text-gray-400 hover:text-gray-600 underline"
+            >
+              Privacy Policy
+            </button>
+          </div>
         </CardContent>
+        {/* Privacy Policy Modal */}
+        {showPrivacyPolicy && (
+          <Dialog open={showPrivacyPolicy} onOpenChange={setShowPrivacyPolicy}>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Privacy Policy of Berry</DialogTitle>
+                <DialogDescription>
+                  This policy will help you understand what data we collect, why we collect it, and what your rights are
+                  in relation to it.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 text-sm">
+                <p>
+                  <strong>Latest update:</strong> August 26, 2025
+                </p>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Owner and Data Controller</h3>
+                  <p>Einat Ehrlich</p>
+                  <p>Owner contact email: einat91@gmail.com</p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Types of Data collected</h3>
+                  <p>The owner does not provide a list of Personal Data types collected.</p>
+                  <p>
+                    Complete details on each type of Personal Data collected are provided in the dedicated sections of
+                    this privacy policy or by specific explanation texts displayed prior to the Data collection.
+                  </p>
+                  <p>
+                    Personal Data may be freely provided by the User, or, in case of Usage Data, collected automatically
+                    when using this Application. Unless specified otherwise, all Data requested by this Application is
+                    mandatory and failure to provide this Data may make it impossible for this Application to provide
+                    its services.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Mode and place of processing the Data</h3>
+                  <h4 className="font-medium mb-1">Methods of processing</h4>
+                  <p>
+                    The Owner takes appropriate security measures to prevent unauthorized access, disclosure,
+                    modification, or unauthorized destruction of the Data.
+                  </p>
+                  <p>
+                    The Data processing is carried out using computers and/or IT enabled tools, following organizational
+                    procedures and modes strictly related to the purposes indicated.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">The purposes of processing</h3>
+                  <p>
+                    Data is processed to provide the dog activity tracking service and maintain user accounts within
+                    family groups.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Cookie Policy</h3>
+                  <p>This Application uses Trackers. To learn more, Users may consult the Cookie Policy.</p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Further Information for Users in the European Union</h3>
+                  <h4 className="font-medium mb-1">Legal basis of processing</h4>
+                  <p>The Owner may process Personal Data relating to Users if one of the following applies:</p>
+                  <ul className="list-disc list-inside ml-4 space-y-1">
+                    <li>Users have given their consent for one or more specific purposes.</li>
+                    <li>
+                      Provision of Data is necessary for the performance of an agreement with the User and/or for any
+                      pre-contractual obligations thereof.
+                    </li>
+                    <li>
+                      Processing is necessary for compliance with a legal obligation to which the Owner is subject.
+                    </li>
+                    <li>
+                      Processing is related to a task that is carried out in the public interest or in the exercise of
+                      official authority vested in the Owner.
+                    </li>
+                    <li>
+                      Processing is necessary for the purposes of the legitimate interests pursued by the Owner or by a
+                      third party.
+                    </li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">
+                    The rights of Users based on the General Data Protection Regulation (GDPR)
+                  </h3>
+                  <p>
+                    Users may exercise certain rights regarding their Data processed by the Owner. In particular, Users
+                    have the right to do the following, to the extent permitted by law:
+                  </p>
+                  <ul className="list-disc list-inside ml-4 space-y-1">
+                    <li>Withdraw their consent at any time.</li>
+                    <li>Object to processing of their Data.</li>
+                    <li>Access their Data.</li>
+                    <li>Verify and seek rectification.</li>
+                    <li>Restrict the processing of their Data.</li>
+                    <li>Have their Personal Data deleted or otherwise removed.</li>
+                    <li>Receive their Data and have it transferred to another controller.</li>
+                    <li>Lodge a complaint.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">How to exercise these rights</h3>
+                  <p>
+                    Any requests to exercise User rights can be directed to the Owner through the contact details
+                    provided in this document. Such requests are free of charge and will be answered by the Owner as
+                    early as possible and always within one month.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Additional information about Data collection and processing</h3>
+                  <h4 className="font-medium mb-1">Legal action</h4>
+                  <p>
+                    The User's Personal Data may be used for legal purposes by the Owner in Court or in the stages
+                    leading to possible legal action arising from improper use of this Application or the related
+                    Services.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">System logs and maintenance</h3>
+                  <p>
+                    For operation and maintenance purposes, this Application and any third-party services may collect
+                    files that record interaction with this Application (System logs) or use other Personal Data (such
+                    as the IP Address) for this purpose.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Changes to this privacy policy</h3>
+                  <p>
+                    The Owner reserves the right to make changes to this privacy policy at any time by notifying its
+                    Users on this page and possibly within this Application.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-semibold mb-2">Definitions and legal references</h3>
+                  <div className="space-y-2">
+                    <div>
+                      <h4 className="font-medium">Personal Data (or Data)</h4>
+                      <p>
+                        Any information that directly, indirectly, or in connection with other information — including a
+                        personal identification number — allows for the identification or identifiability of a natural
+                        person.
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-medium">Usage Data</h4>
+                      <p>
+                        Information collected automatically through this Application, which can include: the IP
+                        addresses or domain names of the computers utilized by the Users who use this Application, the
+                        URI addresses, the time of the request, and other parameters about the device operating system
+                        and/or the User's IT environment.
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-medium">User</h4>
+                      <p>
+                        The individual using this Application who, unless otherwise specified, coincides with the Data
+                        Subject.
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-medium">Data Controller (or Owner)</h4>
+                      <p>
+                        The natural or legal person, public authority, agency or other body which, alone or jointly with
+                        others, determines the purposes and means of the processing of Personal Data, including the
+                        security measures concerning the operation and use of this Application.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-2">Contact Information</h3>
+                  <p>Berry</p>
+                  <p>Einat Ehrlich</p>
+                  <p>Owner contact email: einat91@gmail.com</p>
+                  <p className="text-xs text-gray-500 mt-2">Latest update: August 26, 2025</p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setShowPrivacyPolicy(false)}>Close</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </Card>
     </div>
   )
