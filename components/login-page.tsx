@@ -730,7 +730,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </DialogHeader>
               <div className="space-y-4 text-sm">
                 <p>
-                  <strong>Latest update:</strong> August 26, 2025
+                  <strong>Latest update:</strong> August 27, 2025
                 </p>
 
                 <div>
@@ -741,16 +741,27 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
                 <div>
                   <h3 className="font-semibold mb-2">Types of Data collected</h3>
-                  <p>The owner does not provide a list of Personal Data types collected.</p>
+                  <p>Among the types of Personal Data that this Application collects, by itself or through third parties, there are:</p>
+                  <ul className="list-disc list-inside ml-4 space-y-1">
+                    <li>Usage Data</li>
+                    </ul>
+                    <p>
+                      Complete details on each type of Personal Data collected are provided in the dedicated sections of this privacy policy or by
+                    specific explanation texts displayed prior to the Data collection.
+                    Personal Data may be freely provided by the User, or, in case of Usage Data, collected automatically when using this Application.
+                    Unless specified otherwise, all Data requested by this Application is mandatory and failure to provide this Data may make it
+                    impossible for this Application to provide its services. In cases where this Application specifically states that some Data is not
+                    mandatory, Users are free not to communicate this Data without consequences to the availability or the functioning of the
+                    Service.
+                   </p>
                   <p>
-                    Complete details on each type of Personal Data collected are provided in the dedicated sections of
-                    this privacy policy or by specific explanation texts displayed prior to the Data collection.
+                    Users who are uncertain about which Personal Data is mandatory are welcome to contact the Owner.
+                    Any use of Cookies – or of other tracking tools — by this Application or by the owners of third-party services used by this
+                    Application serves the purpose of providing the Service required by the User, in addition to any other purposes described in the
+                    present document and in the Cookie Policy.
                   </p>
-                  <p>
-                    Personal Data may be freely provided by the User, or, in case of Usage Data, collected automatically
-                    when using this Application. Unless specified otherwise, all Data requested by this Application is
-                    mandatory and failure to provide this Data may make it impossible for this Application to provide
-                    its services.
+                      <p>
+                    Users are responsible for any third-party Personal Data obtained, published or shared through this Application.
                   </p>
                 </div>
 
@@ -903,7 +914,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   <p>Berry</p>
                   <p>Einat Ehrlich</p>
                   <p>Owner contact email: einat91@gmail.com</p>
-                  <p className="text-xs text-gray-500 mt-2">Latest update: August 26, 2025</p>
+                  <p className="text-xs text-gray-500 mt-2">Latest update: August 27, 2025</p>
                 </div>
               </div>
               <DialogFooter>
