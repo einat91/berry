@@ -632,7 +632,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
-  // The updateEntry function is kept generic but is primarily used for editing food here
   const updateEntry = async (entryId: string) => {
     try {
       setUpdatingEntry(true)
@@ -982,7 +981,12 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 <Clock className="h-4 w-4" />
                 <span>Time</span>
               </div>
-              <Input type="time" value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} />
+              <Input 
+                type="time" 
+                value={selectedTime} 
+                onChange={(e) => setSelectedTime(e.target.value)} 
+                className="text-sm" // FIX: Ensure text size matches Select component for alignment
+              />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
@@ -1098,13 +1102,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
-                    {/* Time Display with smaller font fix */}
-                    <div className="text-right flex-shrink-0">
-                      <div className="text-xs font-semibold text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
+                    {/* Activity Entry Time (Reverted to original size) */}
+                    <div className="text-right">
+                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
                   </div>
 
-                  {/* DELETE button revealed on LEFT swipe (User requested Recycle Bin on Right) */}
+                  {/* DELETE button revealed on LEFT swipe (Recycle Bin on Right) */}
                   {swipedEntryId === entry.id && swipeDirection === "left" && (
                     <div className="absolute right-0 top-0 h-full flex items-center">
                       <Button
@@ -1116,7 +1120,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     </div>
                   )}
 
-                  {/* EDIT button revealed on RIGHT swipe for food entries (User requested Pencil on Left) */}
+                  {/* EDIT button revealed on RIGHT swipe for food entries (Pencil on Left) */}
                   {swipedEntryId === entry.id && swipeDirection === "right" && entry.type === "food" && (
                     <div className="absolute left-0 top-0 h-full flex items-center">
                       <Button
