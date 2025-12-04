@@ -107,7 +107,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [editNote, setEditNote] = useState("") // Declare editNote variable
   const [updatingEntry, setUpdatingEntry] = useState(false)
   const { toast } = useToast()
-  const db = getDb() // Declare db variable
+  // The line 'const db = getDb()' has been removed. db is now awaited inside async functions.
 
   const swipeRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const [swipedEntryId, setSwipedEntryId] = useState<string | null>(null)
@@ -159,6 +159,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const loadUserData = async () => {
     try {
+      const db = await getDb() // FIXED: Await db instance
       const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
@@ -230,6 +231,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setLoadingEntries(true)
+      const db = await getDb() // FIXED: Await db instance
       const { collection, query, where, getDocs } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
@@ -274,6 +276,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setSaving(true)
+      const db = await getDb() // FIXED: Await db instance
       const { collection, addDoc, Timestamp } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
@@ -415,6 +418,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const deleteEntry = async (entryId: string) => {
     try {
+      const db = await getDb() // FIXED: Await db instance
       const { doc, deleteDoc } = await import("firebase/firestore")
 
       await deleteDoc(doc(db, "entries", entryId))
@@ -451,17 +455,26 @@ export function DashboardPage({ user }: DashboardPageProps) {
     const distance = touchStart - touchEnd
     const isLeftSwipe = distance > 50
     const isRightSwipe = distance < -50
-
-    if (isLeftSwipe) {
-      setSwipedEntryId(entryId)
-      setSwipeDirection("left")
-    } else if (isRightSwipe) {
+    
+    // User Intent: Swipe Left for Edit (food only)
+    if (isLeftSwipe) { 
       const entry = entries.find((e) => e.id === entryId)
       if (entry?.type === "food") {
         setSwipedEntryId(entryId)
-        setSwipeDirection("right")
+        setSwipeDirection("left")
+      } else {
+        // Clear swipe direction if not a food entry, or set to null
+        setSwipedEntryId(null)
+        setSwipeDirection(null)
       }
-    } else {
+    } 
+    // User Intent: Swipe Right for Delete (all entries)
+    else if (isRightSwipe) {
+      setSwipedEntryId(entryId)
+      setSwipeDirection("right")
+    } 
+    // No significant swipe
+    else {
       setSwipedEntryId(null)
       setSwipeDirection(null)
     }
@@ -545,6 +558,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setAddingMember(true)
+      const db = await getDb() // FIXED: Await db instance
       const { doc, updateDoc, arrayUnion } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
@@ -588,6 +602,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
 
     try {
+      const db = await getDb() // FIXED: Await db instance
       const { doc, updateDoc } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
@@ -618,6 +633,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const updateEntry = async (entryId: string) => {
     try {
       setUpdatingEntry(true)
+      const db = await getDb() // FIXED: Await db instance
       const { doc, updateDoc } = await import("firebase/firestore")
 
       const updateData: any = {}
@@ -679,6 +695,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     if (!editingEntry) return
 
     try {
+      const db = await getDb() // FIXED: Await db instance
       const { doc, updateDoc } = await import("firebase/firestore")
       await updateDoc(doc(db, "entries", editingEntry.id), {
         amount: editAmount,
@@ -1053,9 +1070,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     ref={(el) => (swipeRefs.current[entry.id] = el)}
                     className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ${
                       swipedEntryId === entry.id && swipeDirection === "left"
-                        ? "translate-x-[-80px]"
+                        ? "translate-x-[-80px]" // Item slides left to show button on the right
                         : swipedEntryId === entry.id && swipeDirection === "right"
-                          ? "translate-x-[80px]"
+                          ? "translate-x-[80px]" // Item slides right to show button on the left
                           : "translate-x-0"
                     }`}
                     onTouchStart={(e) => handleTouchStart(e, entry.id)}
@@ -1078,23 +1095,24 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     </div>
                   </div>
 
-                  {swipedEntryId === entry.id && swipeDirection === "right" && entry.type === "food" && (
-                    <div className="absolute left-0 top-0 h-full flex items-center">
+                  {/* EDIT button revealed on LEFT swipe for food entries (User's intent) */}
+                  {swipedEntryId === entry.id && swipeDirection === "left" && entry.type === "food" && (
+                    <div className="absolute right-0 top-0 h-full flex items-center">
                       <Button
                         onClick={() => openEditModal(entry)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white h-full px-6 rounded-r-none"
+                        className="bg-blue-500 hover:bg-blue-600 text-white h-full px-6 rounded-l-none"
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
                     </div>
                   )}
 
-                  {/* Delete button revealed on left swipe */}
-                  {swipedEntryId === entry.id && swipeDirection === "left" && (
-                    <div className="absolute right-0 top-0 h-full flex items-center">
+                  {/* DELETE button revealed on RIGHT swipe (User's intent) */}
+                  {swipedEntryId === entry.id && swipeDirection === "right" && (
+                    <div className="absolute left-0 top-0 h-full flex items-center">
                       <Button
                         onClick={() => deleteEntry(entry.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white h-full px-6 rounded-l-none"
+                        className="bg-red-500 hover:bg-red-600 text-white h-full px-6 rounded-r-none"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
