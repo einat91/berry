@@ -975,7 +975,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </div>
 
           {/* Time and Added By */}
-          <div className="grid grid-cols-2 gap-4 mb-4"> {/* FIXED: Reverted gap back to original gap-4 */}
+          <div className="grid grid-cols-2 gap-2 mb-2"> 
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
