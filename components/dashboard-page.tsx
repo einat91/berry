@@ -975,7 +975,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </div>
 
           {/* Time and Added By */}
-          <div className="grid grid-cols-2 gap-2 mb-4"> 
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
@@ -985,7 +985,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 type="time" 
                 value={selectedTime} 
                 onChange={(e) => setSelectedTime(e.target.value)} 
-                className="text-sm" // Minimal class to allow for better native alignment
+                // Removed explicit padding/height overrides to rely on the smaller base Input fix.
+                className="text-sm" 
               />
             </div>
             <div>
@@ -1102,7 +1103,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
-                    {/* Activity Entry Time - Reverted to original design */}
+                    {/* Activity Entry Time - Original size */}
                     <div className="text-right">
                       <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
