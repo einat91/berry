@@ -981,12 +981,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 <Clock className="h-4 w-4" />
                 <span>Time</span>
               </div>
+              {/* This input will now be shorter due to the global change in components/ui/input.tsx */}
               <Input 
                 type="time" 
                 value={selectedTime} 
                 onChange={(e) => setSelectedTime(e.target.value)} 
-                // Removed explicit padding/height overrides to rely on the smaller base Input fix.
-                className="text-sm" 
               />
             </div>
             <div>
@@ -1041,7 +1040,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
               placeholder="Quick note..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="text-sm"
             />
           </div>
 
@@ -1179,7 +1177,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 placeholder="Quick note..."
                 value={editNote}
                 onChange={(e) => setEditNote(e.target.value)}
-                className="text-sm"
               />
             </div>
 
