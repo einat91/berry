@@ -158,7 +158,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const loadUserData = async () => {
     try {
-      const db = await getDb() // FIXED: Await db instance
+      const db = await getDb()
       const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
@@ -230,7 +230,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setLoadingEntries(true)
-      const db = await getDb() // FIXED: Await db instance
+      const db = await getDb()
       const { collection, query, where, getDocs } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
@@ -275,7 +275,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setSaving(true)
-      const db = await getDb() // FIXED: Await db instance
+      const db = await getDb()
       const { collection, addDoc, Timestamp } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
@@ -417,7 +417,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const deleteEntry = async (entryId: string) => {
     try {
-      const db = await getDb() // FIXED: Await db instance
+      const db = await getDb()
       const { doc, deleteDoc } = await import("firebase/firestore")
 
       await deleteDoc(doc(db, "entries", entryId))
@@ -452,28 +452,28 @@ export function DashboardPage({ user }: DashboardPageProps) {
     if (!touchStart || !touchEnd) return
 
     const distance = touchStart - touchEnd
-    const isLeftSwipe = distance > 50  // Positive distance = swipe from right to left (Edit)
-    const isRightSwipe = distance < -50 // Negative distance = swipe from left to right (Delete)
+    const isLeftSwipe = distance > 50  // Positive distance = swipe from right to left (Delete)
+    const isRightSwipe = distance < -50 // Negative distance = swipe from left to right (Edit)
 
-    // --- LOGIC FOR SWIPE LEFT (EDIT for food entries) ---
+    // --- LOGIC FOR SWIPE LEFT (DELETE for all entries - Show button on Right) ---
     if (isLeftSwipe) {
+      // Allow SWIPE LEFT to trigger DELETE for any entry type
+      setSwipedEntryId(entryId)
+      setSwipeDirection("left") 
+    } 
+    // --- LOGIC FOR SWIPE RIGHT (EDIT for food entries - Show button on Left) ---
+    else if (isRightSwipe) {
       const entry = entries.find((e) => e.id === entryId)
       
-      // Only allow SWIPE LEFT to trigger EDIT if the entry type is 'food'
+      // Only allow SWIPE RIGHT to trigger EDIT if the entry type is 'food'
       if (entry?.type === "food") {
         setSwipedEntryId(entryId)
-        setSwipeDirection("left")
+        setSwipeDirection("right") 
       } else {
         // If it's a non-food item, do not trigger the swipe action
         setSwipedEntryId(null)
         setSwipeDirection(null)
       }
-    } 
-    // --- LOGIC FOR SWIPE RIGHT (DELETE for all entries) ---
-    else if (isRightSwipe) {
-      // Allow SWIPE RIGHT to trigger DELETE for any entry type
-      setSwipedEntryId(entryId)
-      setSwipeDirection("right")
     } 
     // No significant swipe
     else {
@@ -560,7 +560,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setAddingMember(true)
-      const db = await getDb() // FIXED: Await db instance
+      const db = await getDb()
       const { doc, updateDoc, arrayUnion } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
@@ -604,7 +604,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
 
     try {
-      const db = await getDb() // FIXED: Await db instance
+      const db = await getDb()
       const { doc, updateDoc } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
@@ -632,16 +632,18 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
   }
 
+  // The updateEntry function is kept generic but is primarily used for editing food here
   const updateEntry = async (entryId: string) => {
     try {
       setUpdatingEntry(true)
-      const db = await getDb() // FIXED: Await db instance
+      const db = await getDb()
       const { doc, updateDoc } = await import("firebase/firestore")
 
       const updateData: any = {}
 
       if (editAmount && editAmount !== editingEntry?.amount) {
-        updateData.amount = editAmount
+        // Ensure amount is stored correctly with 'g'
+        updateData.amount = editAmount.endsWith('g') ? editAmount : `${editAmount}g` 
       }
 
       if (editNote !== editingEntry?.notes) {
@@ -681,8 +683,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const openEditModal = (entry: Entry) => {
     setEditingEntry(entry)
-    setEditAmount(entry.amount || "")
-    setEditNote(entry.notes || "") // Initialize editNote with entry notes
+    // Pass only the number value (or empty string) to the state for the Select component
+    setEditAmount(entry.amount ? entry.amount.replace('g', '') : "") 
+    setEditNote(entry.notes || "") 
     setSwipedEntryId(null)
     setSwipeDirection(null)
   }
@@ -690,23 +693,26 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const closeEditModal = () => {
     setEditingEntry(null)
     setEditAmount("")
-    setEditNote("") // Reset editNote when closing modal
+    setEditNote("") 
   }
 
   const saveEdit = async () => {
     if (!editingEntry) return
 
     try {
-      const db = await getDb() // FIXED: Await db instance
+      const db = await getDb()
       const { doc, updateDoc } = await import("firebase/firestore")
+      
+      const newAmountWithG = editAmount.endsWith('g') ? editAmount : `${editAmount}g`;
+      
       await updateDoc(doc(db, "entries", editingEntry.id), {
-        amount: editAmount,
-        notes: editNote.trim() || null, // Include notes in update
+        amount: newAmountWithG,
+        notes: editNote.trim() || null, 
       })
 
       setEntries((prev) =>
         prev.map((entry) =>
-          entry.id === editingEntry.id ? { ...entry, amount: editAmount, notes: editNote.trim() || null } : entry,
+          entry.id === editingEntry.id ? { ...entry, amount: newAmountWithG, notes: editNote.trim() || null } : entry,
         ),
       )
 
@@ -1072,9 +1078,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     ref={(el) => (swipeRefs.current[entry.id] = el)}
                     className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ${
                       swipedEntryId === entry.id && swipeDirection === "left"
-                        ? "translate-x-[-80px]" // Item slides left to show button on the right (Edit)
+                        ? "translate-x-[-80px]" // Item slides left to show button on the right (Delete)
                         : swipedEntryId === entry.id && swipeDirection === "right"
-                          ? "translate-x-[80px]" // Item slides right to show button on the left (Delete)
+                          ? "translate-x-[80px]" // Item slides right to show button on the left (Edit)
                           : "translate-x-0"
                     }`}
                     onTouchStart={(e) => handleTouchStart(e, entry.id)}
@@ -1092,31 +1098,32 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
+                    {/* Time Display with smaller font fix */}
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-xs font-semibold text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
                   </div>
 
-                  {/* EDIT button revealed on LEFT swipe for food entries */}
-                  {swipedEntryId === entry.id && swipeDirection === "left" && entry.type === "food" && (
+                  {/* DELETE button revealed on LEFT swipe (User requested Recycle Bin on Right) */}
+                  {swipedEntryId === entry.id && swipeDirection === "left" && (
                     <div className="absolute right-0 top-0 h-full flex items-center">
                       <Button
-                        onClick={() => openEditModal(entry)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white h-full px-6 rounded-l-none"
+                        onClick={() => deleteEntry(entry.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white h-full px-6 rounded-l-none"
                       >
-                        <Edit2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   )}
 
-                  {/* DELETE button revealed on RIGHT swipe */}
-                  {swipedEntryId === entry.id && swipeDirection === "right" && (
+                  {/* EDIT button revealed on RIGHT swipe for food entries (User requested Pencil on Left) */}
+                  {swipedEntryId === entry.id && swipeDirection === "right" && entry.type === "food" && (
                     <div className="absolute left-0 top-0 h-full flex items-center">
                       <Button
-                        onClick={() => deleteEntry(entry.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white h-full px-6 rounded-r-none"
+                        onClick={() => openEditModal(entry)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white h-full px-6 rounded-r-none"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Edit2 className="h-4 w-4" />
                       </Button>
                     </div>
                   )}
@@ -1127,21 +1134,41 @@ export function DashboardPage({ user }: DashboardPageProps) {
         </div>
       </main>
 
+      {/* Edit Modal with Select Dropdown */}
       {editingEntry && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-sm">
-            <h2 className="text-lg font-semibold mb-4">Edit Food Amount</h2>
-            <input
-              type="number"
-              value={editAmount}
-              onChange={(e) => setEditAmount(e.target.value)}
-              placeholder="Enter amount"
-              className="w-full px-3 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-teal-500"
-            />
+            <h2 className="text-lg font-semibold mb-4">Edit Food Activity</h2>
+            
+            {/* Dropdown for Food Amount */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+                <Utensils className="h-4 w-4" />
+                <span>Grams *</span>
+              </div>
+              {/* Use editAmount stripped of 'g' for the value, and add 'g' back on change */}
+              <Select 
+                value={editAmount.replace('g', '')} 
+                onValueChange={(val) => setEditAmount(val)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select amount" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FOOD_AMOUNTS.map((grams) => (
+                    <SelectItem key={grams} value={grams.toString()}>
+                      {grams}g
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Note Input */}
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <FileText className="h-4 w-4" />
-                <span>Note</span>
+                <span>Note (optional)</span>
               </div>
               <Input
                 placeholder="Quick note..."
@@ -1150,6 +1177,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 className="text-sm"
               />
             </div>
+
             <div className="flex gap-2">
               <button
                 onClick={closeEditModal}
