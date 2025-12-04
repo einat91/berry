@@ -39,6 +39,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { DayPicker } from "react-day-picker" // NEW: Import Calendar component
+import 'react-day-picker/dist/style.css'; // NOTE: You may need to ensure this is imported/included somewhere globally
 
 interface UserType {
   id: string
@@ -81,6 +83,50 @@ const FOOD_AMOUNTS = [25, 50, 75, 100, 125, 150, 175, 200]
 const getFirstName = (name: string) => {
   return name ? name.split(" ")[0] : name
 }
+
+// NEW COMPONENT: DatePicker functionality wrapped in a Dialog
+const DatePicker = ({ selectedDate, setSelectedDate }: { selectedDate: Date, setSelectedDate: (date: Date) => void }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    
+    // DayPicker's onSelect signature expects a Date or undefined
+    const handleSelect = (date: Date | undefined) => {
+        if (date) {
+            setSelectedDate(date);
+            setIsOpen(false);
+        }
+    }
+
+    return (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <button className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors">
+                    <CalendarIcon className="h-4 w-4" />
+                    <div className="text-sm">{format(selectedDate, "dd/MM/yyyy")}</div>
+                </button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Select a Date</DialogTitle>
+                    <DialogDescription>
+                        Jump to a specific date to log activities.
+                    </DialogDescription>
+                </DialogHeader>
+                <DayPicker
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={handleSelect}
+                    showOutsideDays={true}
+                    // Disable future dates
+                    disabled={(date) => date > new Date()} 
+                    initialFocus
+                />
+                <DialogFooter>
+                    <Button onClick={() => setIsOpen(false)} variant="outline">Close</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
 
 export function DashboardPage({ user }: DashboardPageProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -897,10 +943,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-2 text-gray-600">
-            <CalendarIcon className="h-4 w-4" />
-            <div className="text-sm">{format(selectedDate, "dd/MM/yyyy")}</div>
-          </div>
+          
+          {/* FEATURE: Date Picker Trigger */}
+          <DatePicker selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+
           <Button
             variant="ghost"
             size="icon"
@@ -983,7 +1029,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
 
-          {/* Time and Added By - Proportional grid split and original gap */}
+          {/* Time and Added By - Proportional grid split to correct width imbalance */}
           <div className="grid grid-cols-12 gap-4 mb-4">
             <div className="col-span-5"> {/* Time takes 5/12 columns (horizontally shorter) */}
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
@@ -996,7 +1042,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 onChange={(e) => setSelectedTime(e.target.value)} 
               />
             </div>
-            <div className="col-span-7"> {/* Added By takes 7/12 columns (horizontally longer) */}
+            <div className="col-span-7"> {/* Added By takes 7/12 columns (horizontally longer/wider) */}
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <User className="h-4 w-4" />
                 <span>Added by</span>
