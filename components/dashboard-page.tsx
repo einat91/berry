@@ -983,21 +983,20 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
 
-          {/* Time and Added By - Reverted to grid-cols-2 with gap-4 */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
+          {/* Time and Added By - Using proportional grid cols for size and space */}
+          <div className="grid grid-cols-12 gap-4 mb-4">
+            <div className="col-span-5"> {/* Time takes 5/12 columns (shorter width) */}
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
                 <span>Time</span>
               </div>
-              {/* Relies on global Input fix (py-1.5) for proper height alignment */}
               <Input 
                 type="time" 
                 value={selectedTime} 
                 onChange={(e) => setSelectedTime(e.target.value)} 
               />
             </div>
-            <div>
+            <div className="col-span-7"> {/* Added By takes 7/12 columns (longer width) */}
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <User className="h-4 w-4" />
                 <span>Added by</span>
