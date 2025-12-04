@@ -6,8 +6,8 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Berry: Pet Care Tracker",
-  description: "Track your pet's daily activities with your family",
+  title: "Berry - Dog Activity Tracker",
+  description: "Track your dog's daily activities with your family",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -41,7 +41,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <meta name="google-site-verification" content="ibIIesFxOzAI5f70eu8wcOx6tXGVa64nXbsThuhRtiI" />
         {/* iPhone/iPad app icons */}
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152x152.png" />

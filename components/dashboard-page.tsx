@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,6 +23,7 @@ import {
   Trash2,
   TrendingUp,
   RefreshCw,
+  Edit2,
 } from "lucide-react"
 import { format, addDays, subDays, isToday } from "date-fns"
 import Image from "next/image"
@@ -76,7 +79,7 @@ const FOOD_AMOUNTS = [25, 50, 75, 100, 125, 150, 175, 200]
 
 // Helper function to ensure only first name is displayed
 const getFirstName = (name: string) => {
-  return name ? name.split(' ')[0] : name
+  return name ? name.split(" ")[0] : name
 }
 
 export function DashboardPage({ user }: DashboardPageProps) {
@@ -99,14 +102,18 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
   const [dailySummary, setDailySummary] = useState<DailySummary>({ totalPee: 0, totalPoop: 0, totalFood: 0 })
   const [loggingOut, setLoggingOut] = useState(false)
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
+  const [editAmount, setEditAmount] = useState("")
+  const [editNote, setEditNote] = useState("") // Declare editNote variable
+  const [updatingEntry, setUpdatingEntry] = useState(false)
   const { toast } = useToast()
-
-  // Touch handling for swipe to delete
-  const [touchStart, setTouchStart] = useState<number | null>(null)
-  const [touchEnd, setTouchEnd] = useState<number | null>(null)
-  const [swipedEntryId, setSwipedEntryId] = useState<string | null>(null)
+  const db = getDb() // Declare db variable
 
   const swipeRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+  const [swipedEntryId, setSwipedEntryId] = useState<string | null>(null)
+  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(null)
+  const [touchStart, setTouchStart] = useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = useState<number | null>(null)
 
   useEffect(() => {
     loadUserData()
@@ -139,27 +146,26 @@ export function DashboardPage({ user }: DashboardPageProps) {
             acc.totalPoop += 1
             break
           case "food":
-            const grams = entry.amount ? parseInt(entry.amount.replace('g', '')) || 0 : 0
+            const grams = entry.amount ? Number.parseInt(entry.amount.replace("g", "")) || 0 : 0
             acc.totalFood += grams
             break
         }
         return acc
       },
-      { totalPee: 0, totalPoop: 0, totalFood: 0 }
+      { totalPee: 0, totalPoop: 0, totalFood: 0 },
     )
     setDailySummary(summary)
   }
 
   const loadUserData = async () => {
     try {
-      const db: any = await getDb()
       const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
       const userDocSnap = await getDoc(userDocRef)
 
       let userData = null
-      
+
       if (userDocSnap.exists()) {
         userData = userDocSnap.data()
       } else {
@@ -170,7 +176,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         if (!querySnapshot.empty) {
           const familyDoc = querySnapshot.docs[0]
           userData = familyDoc.data()
-          
+
           const { setDoc } = await import("firebase/firestore")
           await setDoc(userDocRef, {
             name: user.name,
@@ -185,17 +191,17 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       if (userData) {
         setDogName(userData.dogName || "")
-        
+
         const members = userData.familyMembers || [user.name]
         const formattedMembers = members.map((member: any) => {
-          if (typeof member === 'string') {
+          if (typeof member === "string") {
             return { name: member }
           }
           return member
         })
-        
+
         setFamilyMembers(formattedMembers)
-        
+
         // Use originalFamilyId if it exists (for joined families), otherwise use user's document ID
         const familyIdentifier = userData.originalFamilyId || userDocSnap.id || user.id
         console.log("🏠 Using family ID for activities:", familyIdentifier)
@@ -224,17 +230,12 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setLoadingEntries(true)
-      const db: any = await getDb()
       const { collection, query, where, getDocs } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
       const entriesRef = collection(db, "entries")
 
-      const q = query(
-        entriesRef,
-        where("familyId", "==", familyId),
-        where("date", "==", dateKey)
-      )
+      const q = query(entriesRef, where("familyId", "==", familyId), where("date", "==", dateKey))
 
       const querySnapshot = await getDocs(q)
       const loadedEntries = querySnapshot.docs.map((doc) => ({
@@ -273,11 +274,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setSaving(true)
-      const db: any = await getDb()
       const { collection, addDoc, Timestamp } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
-      
+
       const entryData = {
         type: entry.type,
         timestamp: Timestamp.fromDate(entry.timestamp),
@@ -311,22 +311,21 @@ export function DashboardPage({ user }: DashboardPageProps) {
       })
 
       return true
-      
     } catch (error) {
       console.error("❌ Error saving entry:", error)
-      
+
       let errorMessage = "Failed to save activity. "
-      
-      if (error.code === 'permission-denied') {
+
+      if (error.code === "permission-denied") {
         errorMessage += "Database permission denied. Please check Firebase rules."
-      } else if (error.code === 'unavailable') {
+      } else if (error.code === "unavailable") {
         errorMessage += "Database temporarily unavailable. Please try again."
-      } else if (error.message?.includes('offline')) {
+      } else if (error.message?.includes("offline")) {
         errorMessage += "You're offline. Please check your internet connection."
       } else {
         errorMessage += "Please check your connection and try again."
       }
-      
+
       toast({
         title: "Save Failed",
         description: errorMessage,
@@ -404,9 +403,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
     if (successCount > 0) {
       toast({
         title: "Activities Saved",
-        description: `${successCount} ${successCount === 1 ? 'activity' : 'activities'} saved successfully!`,
+        description: `${successCount} ${successCount === 1 ? "activity" : "activities"} saved successfully!`,
       })
-      
+
       // Reset form
       setSelectedActivities(new Set())
       setAmount("50") // Reset to default
@@ -416,14 +415,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const deleteEntry = async (entryId: string) => {
     try {
-      const db: any = await getDb()
       const { doc, deleteDoc } = await import("firebase/firestore")
 
       await deleteDoc(doc(db, "entries", entryId))
-      
-      setEntries(prev => prev.filter(entry => entry.id !== entryId))
+
+      setEntries((prev) => prev.filter((entry) => entry.id !== entryId))
       setSwipedEntryId(null)
-      
+
       toast({
         title: "Activity Deleted",
         description: "Activity has been removed successfully.",
@@ -449,15 +447,23 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const handleTouchEnd = (entryId: string) => {
     if (!touchStart || !touchEnd) return
-    
+
     const distance = touchStart - touchEnd
     const isLeftSwipe = distance > 50
     const isRightSwipe = distance < -50
 
     if (isLeftSwipe) {
       setSwipedEntryId(entryId)
+      setSwipeDirection("left")
     } else if (isRightSwipe) {
+      const entry = entries.find((e) => e.id === entryId)
+      if (entry?.type === "food") {
+        setSwipedEntryId(entryId)
+        setSwipeDirection("right")
+      }
+    } else {
       setSwipedEntryId(null)
+      setSwipeDirection(null)
     }
   }
 
@@ -539,13 +545,12 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setAddingMember(true)
-      const db: any = await getDb()
       const { doc, updateDoc, arrayUnion } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
       const newMember = {
         name: getFirstName(newMemberName.trim()),
-        ...(newMemberEmail.trim() && { email: newMemberEmail.trim() })
+        ...(newMemberEmail.trim() && { email: newMemberEmail.trim() }),
       }
 
       await updateDoc(userDocRef, {
@@ -583,12 +588,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
     }
 
     try {
-      const db: any = await getDb()
       const { doc, updateDoc } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
-      const updatedMembers = familyMembers.filter((m) => 
-        m.name !== memberToRemove.name || m.email !== memberToRemove.email
+      const updatedMembers = familyMembers.filter(
+        (m) => m.name !== memberToRemove.name || m.email !== memberToRemove.email,
       )
 
       await updateDoc(userDocRef, {
@@ -606,6 +610,97 @@ export function DashboardPage({ user }: DashboardPageProps) {
       toast({
         title: "Failed to Remove Member",
         description: "Could not remove family member. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const updateEntry = async (entryId: string) => {
+    try {
+      setUpdatingEntry(true)
+      const { doc, updateDoc } = await import("firebase/firestore")
+
+      const updateData: any = {}
+
+      if (editAmount && editAmount !== editingEntry?.amount) {
+        updateData.amount = editAmount
+      }
+
+      if (editNote !== editingEntry?.notes) {
+        updateData.notes = editNote.trim() || null
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await updateDoc(doc(db, "entries", entryId), updateData)
+
+        // Update local state
+        setEntries((prev) =>
+          prev.map((entry) =>
+            entry.id === entryId
+              ? { ...entry, amount: updateData.amount || entry.amount, notes: updateData.notes || entry.notes }
+              : entry,
+          ),
+        )
+
+        toast({
+          title: "Activity Updated",
+          description: "Your activity has been updated successfully!",
+        })
+      }
+
+      setEditingEntry(null)
+    } catch (error) {
+      console.error("Error updating entry:", error)
+      toast({
+        title: "Update Failed",
+        description: "Could not update activity. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingEntry(false)
+    }
+  }
+
+  const openEditModal = (entry: Entry) => {
+    setEditingEntry(entry)
+    setEditAmount(entry.amount || "")
+    setEditNote(entry.notes || "") // Initialize editNote with entry notes
+    setSwipedEntryId(null)
+    setSwipeDirection(null)
+  }
+
+  const closeEditModal = () => {
+    setEditingEntry(null)
+    setEditAmount("")
+    setEditNote("") // Reset editNote when closing modal
+  }
+
+  const saveEdit = async () => {
+    if (!editingEntry) return
+
+    try {
+      const { doc, updateDoc } = await import("firebase/firestore")
+      await updateDoc(doc(db, "entries", editingEntry.id), {
+        amount: editAmount,
+        notes: editNote.trim() || null, // Include notes in update
+      })
+
+      setEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === editingEntry.id ? { ...entry, amount: editAmount, notes: editNote.trim() || null } : entry,
+        ),
+      )
+
+      closeEditModal()
+      toast({
+        title: "Activity Updated",
+        description: "Amount and note have been updated successfully.",
+      })
+    } catch (error) {
+      console.error("Error updating entry:", error)
+      toast({
+        title: "Update Failed",
+        description: "Could not update activity. Please check your connection and try again.",
         variant: "destructive",
       })
     }
@@ -668,14 +763,15 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     <h3 className="text-sm font-medium">Current Family Members</h3>
                     <div className="space-y-2">
                       {familyMembers.map((member, index) => (
-                        <div key={`${member.name}-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                        <div
+                          key={`${member.name}-${index}`}
+                          className="flex items-center justify-between p-2 bg-gray-50 rounded-md"
+                        >
                           <div className="flex items-center gap-2">
                             <User className="h-4 w-4 text-gray-500" />
                             <div>
                               <span className="text-sm font-medium">{getFirstName(member.name)}</span>
-                              {member.email && (
-                                <div className="text-xs text-gray-500">{member.email}</div>
-                              )}
+                              {member.email && <div className="text-xs text-gray-500">{member.email}</div>}
                             </div>
                           </div>
                           <Button
@@ -694,7 +790,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     <h3 className="text-sm font-medium">Add New Member</h3>
                     <div className="space-y-2">
                       <div>
-                        <Label htmlFor="memberName" className="text-xs">Name *</Label>
+                        <Label htmlFor="memberName" className="text-xs">
+                          Name *
+                        </Label>
                         <Input
                           id="memberName"
                           placeholder="Enter name"
@@ -704,7 +802,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="memberEmail" className="text-xs">Email (optional)</Label>
+                        <Label htmlFor="memberEmail" className="text-xs">
+                          Email (optional)
+                        </Label>
                         <Input
                           id="memberEmail"
                           type="email"
@@ -730,7 +830,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button onClick={() => setShowFamilyDialog(false)} size="sm">Done</Button>
+                  <Button onClick={() => setShowFamilyDialog(false)} size="sm">
+                    Done
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -782,9 +884,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           <div className="flex items-center justify-center gap-2 mb-2">
             <PawPrint className="h-6 w-6 text-gray-600" />
           </div>
-          <h1 className="text-xl font-bold text-gray-700">
-            Welcome, {dogName}'s family!
-          </h1>
+          <h1 className="text-xl font-bold text-gray-700">Welcome, {dogName}'s family!</h1>
         </div>
 
         {/* Daily Summary - Updated with consistent text size */}
@@ -921,7 +1021,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
             onClick={handleLogActivities}
             disabled={selectedDate > new Date() || saving}
           >
-            {saving ? "Saving..." : selectedDate > new Date() ? "Cannot log future activities" : `Log ${selectedActivities.size > 1 ? 'Activities' : 'Activity'}`}
+            {saving
+              ? "Saving..."
+              : selectedDate > new Date()
+                ? "Cannot log future activities"
+                : `Log ${selectedActivities.size > 1 ? "Activities" : "Activity"}`}
           </Button>
         </div>
 
@@ -946,9 +1050,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
               {entries.map((entry) => (
                 <div key={entry.id} className="relative overflow-hidden">
                   <div
-                    ref={(el) => swipeRefs.current[entry.id] = el}
+                    ref={(el) => (swipeRefs.current[entry.id] = el)}
                     className={`flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-transform duration-200 ${
-                      swipedEntryId === entry.id ? 'translate-x-[-80px]' : 'translate-x-0'
+                      swipedEntryId === entry.id && swipeDirection === "left"
+                        ? "translate-x-[-80px]"
+                        : swipedEntryId === entry.id && swipeDirection === "right"
+                          ? "translate-x-[80px]"
+                          : "translate-x-0"
                     }`}
                     onTouchStart={(e) => handleTouchStart(e, entry.id)}
                     onTouchMove={(e) => handleTouchMove(e, entry.id)}
@@ -966,13 +1074,23 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
                     <div className="text-right">
-                      {/* 24-hour format for time display */}
                       <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
                   </div>
-                  
-                  {/* Delete button revealed on swipe */}
-                  {swipedEntryId === entry.id && (
+
+                  {swipedEntryId === entry.id && swipeDirection === "right" && entry.type === "food" && (
+                    <div className="absolute left-0 top-0 h-full flex items-center">
+                      <Button
+                        onClick={() => openEditModal(entry)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white h-full px-6 rounded-r-none"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Delete button revealed on left swipe */}
+                  {swipedEntryId === entry.id && swipeDirection === "left" && (
                     <div className="absolute right-0 top-0 h-full flex items-center">
                       <Button
                         onClick={() => deleteEntry(entry.id)}
@@ -988,6 +1106,47 @@ export function DashboardPage({ user }: DashboardPageProps) {
           )}
         </div>
       </main>
+
+      {editingEntry && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-sm">
+            <h2 className="text-lg font-semibold mb-4">Edit Food Amount</h2>
+            <input
+              type="number"
+              value={editAmount}
+              onChange={(e) => setEditAmount(e.target.value)}
+              placeholder="Enter amount"
+              className="w-full px-3 py-2 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+                <FileText className="h-4 w-4" />
+                <span>Note</span>
+              </div>
+              <Input
+                placeholder="Quick note..."
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={closeEditModal}
+                className="flex-1 px-4 py-2 text-gray-700 border rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
