@@ -975,7 +975,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </div>
 
           {/* Time and Added By */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-2 gap-2 mb-4"> {/* FIX: Changed gap-4 to gap-2 for smaller space */}
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
@@ -985,8 +985,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 type="time" 
                 value={selectedTime} 
                 onChange={(e) => setSelectedTime(e.target.value)} 
-                // FIX: Explicitly set styling to force alignment with Select input on mobile
-                className="text-sm px-3 py-0 h-10" 
+                className="text-sm" // Retain text size control, remove restrictive padding/height overrides
               />
             </div>
             <div>
