@@ -98,7 +98,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [newMemberName, setNewMemberName] = useState("")
   const [newMemberEmail, setNewMemberEmail] = useState("")
   const [addingMember, setAddingMember] = useState(false)
-  const [amount, setAmount] = useState("50") // Default to 50g
+  const [amount, setAmount] = useState("75") // FIXED: Default food size is now 75
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
   const [dailySummary, setDailySummary] = useState<DailySummary>({ totalPee: 0, totalPoop: 0, totalFood: 0 })
   const [loggingOut, setLoggingOut] = useState(false)
@@ -126,9 +126,18 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   useEffect(() => {
     if (familyMembers.length > 0 && !selectedMember) {
-      setSelectedMember(getFirstName(familyMembers[0]?.name || ""))
+        // FIXED: Prioritize setting the selected member to the current user's name
+        const currentUserName = getFirstName(user.name);
+        const currentUserInFamily = familyMembers.find(member => getFirstName(member.name) === currentUserName);
+        
+        if (currentUserInFamily) {
+            setSelectedMember(currentUserName);
+        } else {
+            // Fallback to the first member in the list
+            setSelectedMember(getFirstName(familyMembers[0]?.name || ""));
+        }
     }
-  }, [familyMembers])
+  }, [familyMembers, selectedMember, user.name])
 
   useEffect(() => {
     calculateDailySummary()
@@ -410,7 +419,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
       // Reset form
       setSelectedActivities(new Set())
-      setAmount("50") // Reset to default
+      setAmount("75") // FIXED: Default food size is now 75
       setNote("")
     }
   }
@@ -974,20 +983,21 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
 
-          {/* Time and Added By - Using proportional grid cols for space correction */}
-          <div className="grid grid-cols-12 gap-4 mb-4">
-            <div className="col-span-5"> {/* Time takes 5/12 columns */}
+          {/* Time and Added By - Reverted to grid-cols-2 with gap-4 */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
                 <span>Time</span>
               </div>
+              {/* Relies on global Input fix (py-1.5) for proper height alignment */}
               <Input 
                 type="time" 
                 value={selectedTime} 
                 onChange={(e) => setSelectedTime(e.target.value)} 
               />
             </div>
-            <div className="col-span-7"> {/* Added By takes 7/12 columns (making it visually longer) */}
+            <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <User className="h-4 w-4" />
                 <span>Added by</span>
