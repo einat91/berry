@@ -985,7 +985,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 type="time" 
                 value={selectedTime} 
                 onChange={(e) => setSelectedTime(e.target.value)} 
-                className="text-sm" // FIX: Ensure text size matches Select component for alignment
+                // FIX: Explicitly set styling to force alignment with Select input on mobile
+                className="text-sm px-3 py-0 h-10" 
               />
             </div>
             <div>
@@ -1102,7 +1103,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
-                    {/* Activity Entry Time (Reverted to original size) */}
+                    {/* Activity Entry Time - Reverted to original design */}
                     <div className="text-right">
                       <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
