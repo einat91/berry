@@ -974,21 +974,20 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
 
-          {/* Time and Added By */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
+          {/* Time and Added By - Using proportional grid cols for space correction */}
+          <div className="grid grid-cols-12 gap-4 mb-4">
+            <div className="col-span-5"> {/* Time takes 5/12 columns */}
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
                 <span>Time</span>
               </div>
-              {/* This input will now be shorter due to the global change in components/ui/input.tsx */}
               <Input 
                 type="time" 
                 value={selectedTime} 
                 onChange={(e) => setSelectedTime(e.target.value)} 
               />
             </div>
-            <div>
+            <div className="col-span-7"> {/* Added By takes 7/12 columns (making it visually longer) */}
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <User className="h-4 w-4" />
                 <span>Added by</span>
@@ -1097,106 +1096,3 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       <div className="text-sm text-gray-600">
                         {entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}
                       </div>
-                      <div className="text-xs text-gray-600">By {getFirstName(entry.addedBy)}</div>
-                      {entry.amount && <div className="text-xs text-teal-600 font-medium">{entry.amount}</div>}
-                      {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
-                    </div>
-                    {/* Activity Entry Time - Original size */}
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
-                    </div>
-                  </div>
-
-                  {/* DELETE button revealed on LEFT swipe (Recycle Bin on Right) */}
-                  {swipedEntryId === entry.id && swipeDirection === "left" && (
-                    <div className="absolute right-0 top-0 h-full flex items-center">
-                      <Button
-                        onClick={() => deleteEntry(entry.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white h-full px-6 rounded-l-none"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* EDIT button revealed on RIGHT swipe for food entries (Pencil on Left) */}
-                  {swipedEntryId === entry.id && swipeDirection === "right" && entry.type === "food" && (
-                    <div className="absolute left-0 top-0 h-full flex items-center">
-                      <Button
-                        onClick={() => openEditModal(entry)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white h-full px-6 rounded-r-none"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* Edit Modal with Select Dropdown */}
-      {editingEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm">
-            <h2 className="text-lg font-semibold mb-4">Edit Food Activity</h2>
-            
-            {/* Dropdown for Food Amount */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <Utensils className="h-4 w-4" />
-                <span>Grams *</span>
-              </div>
-              {/* Use editAmount stripped of 'g' for the value, and add 'g' back on change */}
-              <Select 
-                value={editAmount.replace('g', '')} 
-                onValueChange={(val) => setEditAmount(val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select amount" />
-                </SelectTrigger>
-                <SelectContent>
-                  {FOOD_AMOUNTS.map((grams) => (
-                    <SelectItem key={grams} value={grams.toString()}>
-                      {grams}g
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {/* Note Input */}
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <FileText className="h-4 w-4" />
-                <span>Note (optional)</span>
-              </div>
-              <Input
-                placeholder="Quick note..."
-                value={editNote}
-                onChange={(e) => setEditNote(e.target.value)}
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={closeEditModal}
-                className="flex-1 px-4 py-2 text-gray-700 border rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveEdit}
-                className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
