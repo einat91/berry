@@ -779,7 +779,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       console.error("Error updating entry:", error)
       toast({
         title: "Update Failed",
-        description: "Could not update activity. Please check your connection and try again.",
+        description: "Could not update activity. Please try again.",
         variant: "destructive",
       })
     }
@@ -944,7 +944,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             <ChevronLeft className="h-4 w-4" />
           </Button>
           
-          {/* FEATURE: Date Picker Trigger (New component that allows calendar selection) */}
+          {/* FEATURE: Date Picker Trigger */}
           <DatePicker selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
 
           <Button
@@ -1029,7 +1029,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
 
-          {/* Time and Added By - Proportional grid split and original gap */}
+          {/* Time and Added By - Proportional grid split to correct width imbalance */}
           <div className="grid grid-cols-12 gap-4 mb-4">
             <div className="col-span-5"> {/* Time takes 5/12 columns (horizontally shorter) */}
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
