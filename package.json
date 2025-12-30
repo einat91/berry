@@ -1,3 +1,4 @@
+
 {
   "name": "my-v0-project",
   "version": "0.1.0",
@@ -46,7 +47,7 @@
     "firebase": "latest",
     "input-otp": "latest",
     "lucide-react": "^0.454.0",
-    "next": "latest",
+    "next": "15.2.6",
     "next-themes": "latest",
     "react": "^19",
     "react-day-picker": "latest",
@@ -67,12 +68,5 @@
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "sharp",
-      "protobufjs",
-      "@firebase/util"
-    ]
   }
 }
