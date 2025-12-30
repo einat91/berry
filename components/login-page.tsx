@@ -1,282 +1,548 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
-import { Loader2, AlertCircle, CheckCircle, XCircle } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Image from "next/image"
+import { getAuth, getProvider, getDb } from "@/lib/firebaseConfig"
 import { useToast } from "@/hooks/use-toast"
-import { getAuth, getDb, getProvider } from "@/lib/firebaseConfig"
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "firebase/auth"
-import { doc, setDoc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
 
-export function LoginPage({ onLogin }: { onLogin: (user: any) => void }) {
-  const [isLogin, setIsLogin] = useState(true)
-  const [loading, setLoading] = useState(false)
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
+interface User {
+  id: string
+  name: string
+  email: string
+  avatar: string
+}
+
+interface LoginPageProps {
+  onLogin: (user: User) => void
+}
+
+export function LoginPage({ onLogin }: LoginPageProps) {
+  const [activeTab, setActiveTab] = useState<string>("login")
   const [name, setName] = useState("")
   const [dogName, setDogName] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  
-  // DIAGNOSTICS STATE
-  const [envStatus, setEnvStatus] = useState<any>(null)
-  
+  const [loading, setLoading] = useState(false)
+  const [firebaseReady, setFirebaseReady] = useState(false)
+  const [showJoinForm, setShowJoinForm] = useState(false)
   const { toast } = useToast()
 
-  // 1. Check if keys exist (Diagnostics)
   useEffect(() => {
-    const keys = {
-        apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-        authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    };
-    
-    // Check if keys are present (we don't show the full key for security, just Yes/No)
-    setEnvStatus({
-        hasApiKey: !!keys.apiKey && keys.apiKey.length > 0,
-        hasAuthDomain: !!keys.authDomain && keys.authDomain.length > 0,
-        hasProjectId: !!keys.projectId && keys.projectId.length > 0,
-        keyPreview: keys.apiKey ? `${keys.apiKey.substring(0, 4)}...` : "None"
-    });
-
-    const checkConnection = async () => {
-        try {
-            await getAuth();
-        } catch (err: any) {
-            console.error("Firebase Init Error:", err);
-            setError(err.message || "Failed to connect to Database.");
-        }
+    const checkFirebase = async () => {
+      try {
+        await getAuth()
+        await getProvider()
+        await getDb()
+        setFirebaseReady(true)
+      } catch (error) {
+        console.error("Error checking Firebase:", error)
+        toast({
+          title: "Initialization Error",
+          description: "Failed to initialize app. Please refresh the page.",
+          variant: "destructive",
+        })
+      }
     }
-    checkConnection();
-  }, []);
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (loading) return
-    setLoading(true)
-    setError(null)
+    checkFirebase()
+    setPersistence()
+  }, [])
 
+  const setPersistence = async () => {
     try {
       const auth: any = await getAuth()
-      const db: any = await getDb()
-      
-      if (isLogin) {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password)
-        onLogin(userCredential.user)
-      } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-        const user = userCredential.user
-        
-        await updateProfile(user, { displayName: name })
-        
-        await setDoc(doc(db, "users", user.uid), {
-          name,
-          email,
-          dogName,
-          familyMembers: [name],
-          createdAt: new Date(),
-          photoUrl: null
-        })
-        
-        onLogin({ ...user, displayName: name })
-      }
-    } catch (err: any) {
-      console.error("Auth error:", err)
-      let message = "Authentication failed"
-      if (err.code === 'auth/invalid-credential') message = "Invalid email or password"
-      else if (err.code === 'auth/email-already-in-use') message = "Email already registered"
-      else if (err.code === 'auth/weak-password') message = "Password should be at least 6 characters"
-      
-      setError(message)
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
+      const { setPersistence, browserLocalPersistence } = await import("firebase/auth")
+      await setPersistence(auth, browserLocalPersistence)
+    } catch (error) {
+      console.error("Error setting persistence:", error)
     }
   }
 
-  const handleGoogleLogin = async () => {
-    if (loading) return
+  // Simple, reliable email-based family search
+  const findFamilyByEmail = async (userEmail: string, db: any) => {
+    try {
+      const { collection, getDocs } = await import("firebase/firestore")
+      
+      console.log("🔍 Searching for email in families:", userEmail)
+      
+      if (!userEmail) return null
+
+      const searchEmail = userEmail.toLowerCase().trim()
+      console.log("📧 Normalized search email:", searchEmail)
+      
+      // Get all family documents
+      const usersRef = collection(db, "users")
+      const snapshot = await getDocs(usersRef)
+      
+      console.log("📂 Total families to check:", snapshot.docs.length)
+      
+      // Check each family document
+      for (const familyDoc of snapshot.docs) {
+        const familyData = familyDoc.data()
+        
+        // Skip if not a family document
+        if (!familyData.dogName || !familyData.familyMembers) {
+          continue
+        }
+        
+        console.log(`\n🏠 Checking family: ${familyData.dogName}`)
+        console.log("👥 Family members:", familyData.familyMembers)
+        
+        // Check each family member
+        for (const member of familyData.familyMembers) {
+          let memberEmail = null
+          
+          // Handle different formats
+          if (typeof member === 'string') {
+            memberEmail = member
+          } else if (member && member.email) {
+            memberEmail = member.email
+          }
+          
+          if (memberEmail) {
+            const cleanMemberEmail = memberEmail.toLowerCase().trim()
+            console.log(`   🔍 Comparing: "${searchEmail}" === "${cleanMemberEmail}"`)
+            
+            if (searchEmail === cleanMemberEmail) {
+              console.log("✅ FAMILY FOUND!")
+              console.log("🎯 Family:", familyData.dogName)
+              console.log("👤 Matched member:", member)
+              return familyDoc
+            }
+          }
+        }
+      }
+      
+      console.log("❌ No family found for email:", searchEmail)
+      return null
+      
+    } catch (error) {
+      console.error("❌ Error searching families:", error)
+      return null
+    }
+  }
+
+  const joinExistingFamily = async (familyDoc: any, user: any, displayName: string, db: any) => {
+    try {
+      const { doc, setDoc, updateDoc } = await import("firebase/firestore")
+      
+      const familyData = familyDoc.data()
+      const originalFamilyId = familyDoc.id
+      console.log("🤝 Joining family:", familyData.dogName)
+      console.log("🏠 Original family ID:", originalFamilyId)
+      
+      // Extract first name from Google display name
+      const firstName = displayName.split(' ')[0]
+      console.log("👤 Using first name:", firstName)
+      
+      // Check if user already exists in family members and update/add accordingly
+      let updatedFamilyMembers = [...familyData.familyMembers]
+      const userEmail = user.email.toLowerCase().trim()
+      
+      // Find existing member by email
+      const existingMemberIndex = updatedFamilyMembers.findIndex((member: any) => {
+        if (typeof member === 'string') {
+          return member.toLowerCase().trim() === userEmail
+        }
+        return member.email && member.email.toLowerCase().trim() === userEmail
+      })
+      
+      if (existingMemberIndex >= 0) {
+        // Update existing member with first name only
+        updatedFamilyMembers[existingMemberIndex] = {
+          name: firstName,
+          email: user.email
+        }
+        console.log("👥 Updated existing family member:", firstName)
+      } else {
+        // Add new member with first name only
+        updatedFamilyMembers.push({
+          name: firstName,
+          email: user.email
+        })
+        console.log("👥 Added new family member:", firstName)
+      }
+      
+      // Update the original family document
+      await updateDoc(familyDoc.ref, {
+        familyMembers: updatedFamilyMembers
+      })
+      
+      // Create user's document that points to the original family
+      const userDocRef = doc(db, "users", user.uid)
+      await setDoc(userDocRef, {
+        name: firstName, // Store first name only
+        email: user.email,
+        dogName: familyData.dogName,
+        familyMembers: updatedFamilyMembers,
+        originalFamilyId: originalFamilyId,
+        createdAt: new Date(),
+      })
+      
+      console.log("✅ Successfully joined family with shared activity log!")
+      return { ...familyData, familyMembers: updatedFamilyMembers, originalFamilyId }
+      
+    } catch (error) {
+      console.error("❌ Error joining family:", error)
+      throw error
+    }
+  }
+
+  const createNewFamily = async (user: any, displayName: string, dogName: string, db: any) => {
+    try {
+      const { doc, setDoc } = await import("firebase/firestore")
+      
+      console.log("🆕 Creating new family for:", dogName)
+      
+      // Extract first name from display name
+      const firstName = displayName.split(' ')[0]
+      console.log("👤 Using first name:", firstName)
+      
+      const userData = {
+        name: firstName, // Store first name only
+        email: user.email,
+        dogName: dogName.trim(),
+        familyMembers: [{ name: firstName, email: user.email }], // First name in members
+        createdAt: new Date(),
+      }
+
+      const userDocRef = doc(db, "users", user.uid)
+      await setDoc(userDocRef, userData)
+      
+      console.log("✅ New family created!")
+      return userData
+      
+    } catch (error) {
+      console.error("❌ Error creating family:", error)
+      throw error
+    }
+  }
+
+  const validateSignupForm = () => {
+    if (!name.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter your name",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    if (!dogName.trim()) {
+      toast({
+        title: "Dog's Name Required", 
+        description: "Please enter your dog's name",
+        variant: "destructive",
+      })
+      return false
+    }
+    
+    return true
+  }
+
+  const handleGoogleLogin = async (isJoining = false, isSignup = false) => {
+    if (!firebaseReady) {
+      toast({
+        title: "Please Wait",
+        description: "App is still initializing. Please wait a moment.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (isSignup && !validateSignupForm()) {
+      return
+    }
+
+    if (isJoining && !name.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter your name",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
-    setError(null)
 
     try {
       const auth: any = await getAuth()
       const provider: any = await getProvider()
-      const result = await signInWithPopup(auth, provider)
-      const user = result.user
       const db: any = await getDb()
 
-      const userDoc = await getDoc(doc(db, "users", user.uid))
-      
-      if (!userDoc.exists()) {
-        const usersRef = collection(db, "users")
-        const q = query(usersRef, where("familyMembers", "array-contains", user.displayName))
-        const querySnapshot = await getDocs(q)
-        
-        let existingData = null
-        if (!querySnapshot.empty) {
-          existingData = querySnapshot.docs[0].data()
-        }
+      const { signInWithPopup } = await import("firebase/auth")
 
-        await setDoc(doc(db, "users", user.uid), {
-          name: user.displayName,
-          email: user.email,
-          dogName: existingData?.dogName || "My Dog",
-          familyMembers: existingData?.familyMembers || [user.displayName],
-          photoUrl: user.photoURL,
-          createdAt: new Date()
+      console.log("🚀 Starting Google authentication...")
+      const result = await signInWithPopup(auth, provider)
+      const user = result.user
+
+      if (!user || !user.email) {
+        throw new Error("No email from Google authentication")
+      }
+
+      console.log("✅ Google authentication successful")
+      console.log("📧 User email:", user.email)
+      console.log("👤 Display name:", user.displayName)
+
+      // Always use first name only for consistency
+      let firstName = ""
+      if (isSignup || isJoining) {
+        firstName = name.trim()
+      } else {
+        // Extract first name from Google display name
+        firstName = user.displayName ? user.displayName.split(' ')[0] : "User"
+      }
+      
+      console.log("👤 Using first name:", firstName)
+
+      const loggedInUser: User = {
+        id: user.uid,
+        name: firstName, // Always first name only
+        email: user.email,
+        avatar: user.photoURL || "/placeholder.svg",
+      }
+
+      // STEP 1: Always search for existing family membership first
+      console.log("\n🔍 STEP 1: Searching for existing family...")
+      const familyDoc = await findFamilyByEmail(user.email, db)
+      
+      if (familyDoc) {
+        // Found existing family - join it
+        const familyData = await joinExistingFamily(familyDoc, user, firstName, db)
+        
+        toast({
+          title: "Welcome to the Family!",
+          description: `Joined ${familyData.dogName}'s family successfully!`,
+        })
+        
+        onLogin(loggedInUser)
+        return
+      }
+
+      // STEP 2: No existing family found
+      console.log("\n❌ No existing family found")
+
+      if (isSignup) {
+        // Create new family
+        console.log("🆕 User wants to create new family")
+        const familyData = await createNewFamily(user, firstName, dogName, db)
+        
+        toast({
+          title: "Welcome to Berry!",
+          description: `Family created for ${familyData.dogName}!`,
+        })
+        
+        onLogin(loggedInUser)
+        return
+      }
+
+      if (isJoining) {
+        // Tried to join but no family found
+        toast({
+          title: "No Family Found",
+          description: "Could not find a family with your email address.",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
+      // Regular login with no family found - show options
+      console.log("❓ Regular login but no family found - showing options")
+      setShowJoinForm(true)
+      setLoading(false)
+
+    } catch (err: any) {
+      console.error("❌ Login error:", err)
+      
+      if (err.code === "auth/popup-closed-by-user") {
+        toast({
+          title: "Login Cancelled",
+          description: "Please try logging in again.",
+        })
+      } else {
+        toast({
+          title: "Login Error",
+          description: err.message || "Something went wrong. Please try again.",
+          variant: "destructive",
         })
       }
-      onLogin(user)
-    } catch (err: any) {
-      console.error("Google auth error:", err)
-      setError(err.message || "Failed to sign in with Google")
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="bg-teal-100 p-3 rounded-full">
-              <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome to Berry</h1>
-          <p className="text-gray-600 mt-2">Track your dog's daily activities with your family</p>
-        </div>
+  const handleBackToLogin = () => {
+    setShowJoinForm(false)
+    setName("")
+  }
 
-        {/* DIAGNOSTICS BOX */}
-        {envStatus && (
-            <div className="bg-white p-4 rounded-lg border border-gray-200 text-sm space-y-2">
-                <h3 className="font-semibold text-gray-700 border-b pb-1">System Check</h3>
-                <div className="flex items-center justify-between">
-                    <span>API Key Found:</span>
-                    {envStatus.hasApiKey ? <CheckCircle className="h-4 w-4 text-green-500"/> : <XCircle className="h-4 w-4 text-red-500"/>}
-                </div>
-                <div className="flex items-center justify-between">
-                    <span>Auth Domain Found:</span>
-                    {envStatus.hasAuthDomain ? <CheckCircle className="h-4 w-4 text-green-500"/> : <XCircle className="h-4 w-4 text-red-500"/>}
-                </div>
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>Key Start: {envStatus.keyPreview}</span>
-                </div>
-                {!envStatus.hasApiKey && (
-                    <div className="text-red-600 text-xs mt-2 font-medium">
-                        CRITICAL: Vercel does not have the API Key. Go to Vercel Settings {'>'} Environment Variables and add it.
-                    </div>
-                )}
-            </div>
-        )}
+  const handleCreateNewFamily = () => {
+    setShowJoinForm(false)
+    setActiveTab("signup")
+  }
 
-        {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
-                <div className="flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="block sm:inline">{error}</span>
-                </div>
+  if (showJoinForm) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4">
+              <Image src="/images/berry-logo.png" alt="Berry" width={200} height={60} />
             </div>
-        )}
-
-        <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100">
-          <form onSubmit={handleEmailAuth} className="space-y-6">
-            {!isLogin && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Your Name</Label>
-                  <Input 
-                    id="name" 
-                    placeholder="John Doe" 
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dogName">Dog's Name</Label>
-                  <Input 
-                    id="dogName" 
-                    placeholder="Buddy" 
-                    value={dogName}
-                    onChange={(e) => setDogName(e.target.value)}
-                    required 
-                  />
-                </div>
-              </>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input 
-                id="email" 
-                type="email" 
-                placeholder="name@example.com" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required 
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input 
-                id="password" 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required 
-              />
-            </div>
-
-            <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : (isLogin ? "Sign In" : "Create Account")}
-            </Button>
-          </form>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-gray-500">Or continue with</span>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <Button 
-                variant="outline" 
-                className="w-full" 
-                onClick={handleGoogleLogin}
-                disabled={loading}
-              >
-                Google
+            <div className="flex items-center gap-2 mb-4">
+              <Button variant="ghost" size="sm" onClick={handleBackToLogin}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Login
               </Button>
             </div>
-          </div>
+            <CardTitle className="text-2xl font-bold">Join or Create Family</CardTitle>
+            <CardDescription>We didn't find an existing family for your email.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="joinName">Your Name *</Label>
+                <Input
+                  id="joinName"
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
 
-          <div className="mt-6 text-center text-sm">
-            <span className="text-gray-600">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
-            </span>
-            <button
-              className="font-medium text-teal-600 hover:text-teal-500"
-              onClick={() => setIsLogin(!isLogin)}
-            >
-              {isLogin ? "Sign up" : "Sign in"}
-            </button>
-          </div>
-        </div>
+              <div className="space-y-2">
+                <Button 
+                  onClick={() => handleGoogleLogin(true, false)} 
+                  className="w-full h-12" 
+                  disabled={loading}
+                  variant="outline"
+                >
+                  {loading ? "Searching..." : "Try to Join Existing Family"}
+                </Button>
+                
+                <Button 
+                  onClick={handleCreateNewFamily} 
+                  className="w-full h-12" 
+                  disabled={loading}
+                >
+                  Create New Family
+                </Button>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-xs text-blue-700 text-center">
+                  💡 If you can't join, the family admin may need to add your email address to the family first.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4">
+            <Image src="/images/berry-logo.png" alt="Berry" width={200} height={60} />
+          </div>
+          <CardTitle className="text-2xl font-bold">Welcome to Berry</CardTitle>
+          <CardDescription>Track your dog's daily activities with your family</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!firebaseReady ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
+              <p className="text-gray-600">Initializing app...</p>
+            </div>
+          ) : (
+            <Tabs defaultValue="login" value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid grid-cols-2 mb-6">
+                <TabsTrigger value="login">Log In</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="login">
+                <div className="space-y-4">
+                  <Button onClick={() => handleGoogleLogin(false, false)} className="w-full h-12" disabled={loading}>
+                    <GoogleIcon className="w-5 h-5 mr-3" />
+                    {loading ? "Logging in..." : "Log in with Google"}
+                  </Button>
+
+                  <p className="text-xs text-center text-gray-600 mt-4">
+                    Will automatically find your family based on your email address
+                  </p>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="signup">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Your Name *</Label>
+                    <Input
+                      id="name"
+                      placeholder="Enter your name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="dogName">Your Dog's Name *</Label>
+                    <Input
+                      id="dogName"
+                      placeholder="Enter your dog's name"
+                      value={dogName}
+                      onChange={(e) => setDogName(e.target.value)}
+                    />
+                  </div>
+
+                  <Button onClick={() => handleGoogleLogin(false, true)} className="w-full h-12" disabled={loading}>
+                    <GoogleIcon className="w-5 h-5 mr-3" />
+                    {loading ? "Creating family..." : "Sign up with Google"}
+                  </Button>
+
+                  <p className="text-xs text-center text-gray-600 mt-4">
+                    Creates a new family account for your dog
+                  </p>
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
+        </CardContent>
+      </Card>
     </div>
+  )
+}
+
+function GoogleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" {...props}>
+      <path
+        fill="currentColor"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="currentColor"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="currentColor"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      />
+      <path
+        fill="currentColor"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      />
+    </svg>
   )
 }
