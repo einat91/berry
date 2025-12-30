@@ -25,7 +25,10 @@ import {
   RefreshCw,
   Edit2,
   BarChart2,
-  ArrowLeft
+  Crown,
+  Sun,
+  CloudSun,
+  Moon
 } from "lucide-react"
 import { format, addDays, subDays, isToday } from "date-fns"
 import Image from "next/image"
@@ -44,7 +47,7 @@ import { Label } from "@/components/ui/label"
 import { DayPicker } from "react-day-picker" 
 import "react-day-picker/style.css";
 // CHART IMPORTS
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 
 interface UserType {
   id: string
@@ -81,6 +84,10 @@ interface DashboardPageProps {
 }
 
 const FOOD_AMOUNTS = [25, 50, 75, 100, 125, 150, 175, 200]
+
+// COLORS for family members
+const MEMBER_COLORS = ["#2563eb", "#db2777", "#16a34a", "#9333ea", "#ea580c", "#0891b2"];
+const getMemberColor = (name: string, index: number) => MEMBER_COLORS[index % MEMBER_COLORS.length];
 
 const getFirstName = (name: string) => {
   return name ? name.split(" ")[0] : name
@@ -147,7 +154,7 @@ const DatePicker = ({ selectedDate, setSelectedDate }: { selectedDate: Date, set
 };
 
 // STATS COMPONENT
-const StatsView = ({ familyId, dogName, onBack }: { familyId: string, dogName: string, onBack: () => void }) => {
+const StatsContent = ({ familyId, dogName, familyMembers }: { familyId: string, dogName: string, familyMembers: FamilyMember[] }) => {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState<any>(null);
 
@@ -157,7 +164,6 @@ const StatsView = ({ familyId, dogName, onBack }: { familyId: string, dogName: s
                 const db = await getDb();
                 const { collection, query, where, getDocs } = await import("firebase/firestore");
                 const entriesRef = collection(db, "entries");
-                // Fetch ALL entries for the family
                 const q = query(entriesRef, where("familyId", "==", familyId));
                 const snapshot = await getDocs(q);
                 
@@ -177,78 +183,68 @@ const StatsView = ({ familyId, dogName, onBack }: { familyId: string, dogName: s
     }, [familyId]);
 
     const processStats = (entries: Entry[]) => {
-        // 1. Travel Buddy (Who added most pee/poop)
-        const buddyCount: {[key: string]: {pee: number, poop: number}} = {};
-        
-        // 2. Best Buddy for Walk Times
+        const buddyCount: {[key: string]: {pee: number, poop: number, total: number}} = {};
         const timeBuddy = {
             morning: {} as {[key: string]: number},
             afternoon: {} as {[key: string]: number},
             night: {} as {[key: string]: number}
         };
-
-        // 3. Poop Times
-        const poopHours: {[key: number]: number} = {};
-
-        // 4. Food Stats
+        
         let totalFood = 0;
         const uniqueFoodDays = new Set<string>();
+
+        // Init all members
+        familyMembers.forEach(m => {
+            const fname = getFirstName(m.name);
+            buddyCount[fname] = { pee: 0, poop: 0, total: 0 };
+        });
 
         entries.forEach(entry => {
             const name = getFirstName(entry.addedBy);
             const hour = entry.timestamp.getHours();
             
-            // Travel Buddy
             if (entry.type === 'pee' || entry.type === 'poop') {
-                if (!buddyCount[name]) buddyCount[name] = { pee: 0, poop: 0 };
+                if (!buddyCount[name]) buddyCount[name] = { pee: 0, poop: 0, total: 0 };
                 buddyCount[name][entry.type]++;
+                buddyCount[name].total++;
 
-                // Best Buddy by Time
-                if (hour >= 5 && hour < 12) { // Morning
-                    timeBuddy.morning[name] = (timeBuddy.morning[name] || 0) + 1;
-                } else if (hour >= 12 && hour < 19) { // Afternoon
-                    timeBuddy.afternoon[name] = (timeBuddy.afternoon[name] || 0) + 1;
-                } else { // Night
-                    timeBuddy.night[name] = (timeBuddy.night[name] || 0) + 1;
-                }
+                if (hour >= 5 && hour < 12) timeBuddy.morning[name] = (timeBuddy.morning[name] || 0) + 1;
+                else if (hour >= 12 && hour < 19) timeBuddy.afternoon[name] = (timeBuddy.afternoon[name] || 0) + 1;
+                else timeBuddy.night[name] = (timeBuddy.night[name] || 0) + 1;
             }
 
-            // Poop Time
-            if (entry.type === 'poop') {
-                poopHours[hour] = (poopHours[hour] || 0) + 1;
-            }
-
-            // Food
             if (entry.type === 'food' && entry.amount) {
                 totalFood += parseInt(entry.amount.replace('g', '')) || 0;
                 uniqueFoodDays.add(format(entry.timestamp, 'yyyy-MM-dd'));
             }
         });
 
-        // Format for Recharts
+        // Travel Buddy Data
         const travelBuddyData = Object.keys(buddyCount).map(name => ({
             name,
-            Activities: buddyCount[name].pee + buddyCount[name].poop
-        })).sort((a,b) => b.Activities - a.Activities);
+            Pee: buddyCount[name].pee,
+            Poop: buddyCount[name].poop,
+            total: buddyCount[name].total
+        })).sort((a,b) => b.total - a.total);
+
+        // Winner for Crown
+        const winner = travelBuddyData.length > 0 ? travelBuddyData[0].name : null;
 
         const getBestBuddy = (counts: {[key:string]: number}) => {
-            if (Object.keys(counts).length === 0) return "N/A";
-            return Object.entries(counts).sort(([,a], [,b]) => b - a)[0][0];
+            if (Object.keys(counts).length === 0) return { name: "N/A", color: "#9ca3af" };
+            const bestName = Object.entries(counts).sort(([,a], [,b]) => b - a)[0][0];
+            const memberIndex = familyMembers.findIndex(m => getFirstName(m.name) === bestName);
+            return { name: bestName, color: getMemberColor(bestName, memberIndex === -1 ? 0 : memberIndex) };
         };
-
-        const poopTimeData = Object.entries(poopHours).map(([hour, count]) => ({
-            hour: `${hour}:00`,
-            count
-        })).sort((a,b) => parseInt(a.hour) - parseInt(b.hour));
 
         const avgFood = uniqueFoodDays.size > 0 ? Math.round(totalFood / uniqueFoodDays.size) : 0;
 
         setStats({
             travelBuddyData,
+            winner,
             bestMorning: getBestBuddy(timeBuddy.morning),
             bestAfternoon: getBestBuddy(timeBuddy.afternoon),
             bestNight: getBestBuddy(timeBuddy.night),
-            poopTimeData,
             avgFood
         });
     };
@@ -256,27 +252,33 @@ const StatsView = ({ familyId, dogName, onBack }: { familyId: string, dogName: s
     if (loading) return <div className="p-8 text-center text-gray-500">Loading statistics...</div>;
 
     return (
-        <div className="space-y-6 pb-8 animate-in fade-in duration-500">
-             {/* Header with Back Button */}
-            <div className="flex items-center gap-2 mb-4">
-                <Button variant="ghost" size="icon" onClick={onBack}>
-                    <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <h2 className="text-xl font-bold text-gray-800">Statistics</h2>
-            </div>
-
+        <div className="space-y-6 animate-in fade-in duration-500 pt-2">
             {/* Travel Buddy Chart */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-sm font-semibold text-gray-600 mb-4 flex items-center gap-2">
                     <PawPrint className="h-4 w-4 text-teal-600"/> Who is {dogName}'s Travel Buddy?
                 </h3>
-                <div className="h-[200px] w-full">
+                <div className="h-[250px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats.travelBuddyData}>
-                            <XAxis dataKey="name" tick={{fontSize: 12}} />
-                            <YAxis hide />
+                        <BarChart data={stats.travelBuddyData} margin={{top: 10, right: 10, left: -20, bottom: 0}}>
+                            <XAxis dataKey="name" tick={({ x, y, payload }) => {
+                                const isWinner = payload.value === stats.winner;
+                                return (
+                                    <g transform={`translate(${x},${y})`}>
+                                        <text x={0} y={0} dy={16} textAnchor="middle" fill="#666" fontSize={12}>
+                                            {payload.value}
+                                        </text>
+                                        {isWinner && (
+                                            <text x={0} y={-25} textAnchor="middle" fontSize={14}>👑</text>
+                                        )}
+                                    </g>
+                                );
+                            }} />
+                            <YAxis tick={{fontSize: 10}} />
                             <Tooltip />
-                            <Bar dataKey="Activities" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                            <Legend wrapperStyle={{fontSize: '12px'}} />
+                            <Bar dataKey="Pee" fill="#eab308" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="Poop" fill="#b45309" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -284,43 +286,41 @@ const StatsView = ({ familyId, dogName, onBack }: { familyId: string, dogName: s
 
             {/* Best Walk Buddies */}
             <div className="grid grid-cols-3 gap-3">
-                <div className="bg-orange-50 p-3 rounded-xl border border-orange-100 text-center">
-                    <div className="text-xs text-orange-600 mb-1">Morning</div>
-                    <div className="font-bold text-gray-800 text-sm">{stats.bestMorning}</div>
+                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
+                        <Sun className="h-3 w-3 text-orange-400" /> Morning
+                    </div>
+                    <div className="font-bold text-sm" style={{ color: stats.bestMorning.color }}>
+                        {stats.bestMorning.name}
+                    </div>
                 </div>
-                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-center">
-                    <div className="text-xs text-blue-600 mb-1">Afternoon</div>
-                    <div className="font-bold text-gray-800 text-sm">{stats.bestAfternoon}</div>
+                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
+                        <CloudSun className="h-3 w-3 text-blue-400" /> Afternoon
+                    </div>
+                    <div className="font-bold text-sm" style={{ color: stats.bestAfternoon.color }}>
+                        {stats.bestAfternoon.name}
+                    </div>
                 </div>
-                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 text-center">
-                    <div className="text-xs text-indigo-600 mb-1">Night</div>
-                    <div className="font-bold text-gray-800 text-sm">{stats.bestNight}</div>
-                </div>
-            </div>
-
-             {/* Poop Time Chart */}
-             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-600 mb-4 flex items-center gap-2">
-                    <Waves className="h-4 w-4 text-amber-700"/> Best Time for Poop
-                </h3>
-                <div className="h-[200px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats.poopTimeData}>
-                            <XAxis dataKey="hour" tick={{fontSize: 10}} />
-                            <Tooltip />
-                            <Bar dataKey="count" fill="#b45309" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
+                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center flex flex-col items-center justify-center">
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
+                        <Moon className="h-3 w-3 text-indigo-400" /> Night
+                    </div>
+                    <div className="font-bold text-sm" style={{ color: stats.bestNight.color }}>
+                        {stats.bestNight.name}
+                    </div>
                 </div>
             </div>
 
             {/* Average Food */}
-            <div className="bg-teal-50 p-6 rounded-xl border border-teal-100 text-center">
-                 <div className="flex justify-center mb-2">
-                    <Utensils className="h-6 w-6 text-teal-600" />
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <div className="bg-gray-100 p-2 rounded-full">
+                        <Utensils className="h-5 w-5 text-gray-600" />
+                    </div>
+                    <div className="text-sm font-medium text-gray-600">Daily Average</div>
                  </div>
-                 <div className="text-3xl font-bold text-teal-800">{stats.avgFood}g</div>
-                 <div className="text-sm text-teal-600">Average Daily Meal Size</div>
+                 <div className="text-xl font-bold text-gray-800">{stats.avgFood}g</div>
             </div>
         </div>
     );
@@ -350,7 +350,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [editAmount, setEditAmount] = useState("")
   const [editNote, setEditNote] = useState("")
   const [updatingEntry, setUpdatingEntry] = useState(false)
-  const [showStats, setShowStats] = useState(false) // NEW STATE FOR STATS
+  const [showStats, setShowStats] = useState(false) 
   const { toast } = useToast()
 
   const swipeRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
@@ -845,38 +845,31 @@ export function DashboardPage({ user }: DashboardPageProps) {
     )
   }
 
-  // --- RENDER VIEW: STATS vs DASHBOARD ---
-
-  if (showStats) {
-    return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            <header className="bg-white p-4 border-b border-gray-100 sticky top-0 z-10">
-                <div className="max-w-md mx-auto flex items-center justify-center">
-                   <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} />
-                </div>
-            </header>
-            <main className="max-w-md mx-auto p-4 w-full flex-1">
-                <StatsView familyId={familyId} dogName={dogName} onBack={() => setShowStats(false)} />
-            </main>
-        </div>
-    )
-  }
-
-  // NORMAL DASHBOARD VIEW
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-white p-4 border-b border-gray-100">
-        <div className="max-w-md mx-auto flex items-center justify-between">
+        <div className="max-w-xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button onClick={goToToday} className="hover:opacity-80 transition-opacity">
               <Image src="/images/berry-logo.png" alt="Berry" width={150} height={50} />
             </button>
           </div>
           <div className="flex items-center gap-2">
-            {/* STATS BUTTON */}
-            <Button variant="ghost" size="icon" onClick={() => setShowStats(true)}>
-              <BarChart2 className="h-5 w-5 text-gray-600" />
-            </Button>
+            {/* STATS POPUP TRIGGER */}
+            <Dialog open={showStats} onOpenChange={setShowStats}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon">
+                    <BarChart2 className="h-5 w-5 text-gray-600" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md w-full max-h-[90vh] overflow-y-auto">
+                 <DialogHeader>
+                    <DialogTitle>Statistics</DialogTitle>
+                    <DialogDescription>Check {dogName}'s activity insights.</DialogDescription>
+                 </DialogHeader>
+                 <StatsContent familyId={familyId} dogName={dogName} familyMembers={familyMembers} />
+              </DialogContent>
+            </Dialog>
 
             <Button variant="ghost" size="icon" onClick={() => window.location.reload()}>
               <RefreshCw className="h-5 w-5 text-gray-600" />
@@ -987,7 +980,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
         </div>
       </header>
 
-      <main className="max-w-md mx-auto p-4 flex-1">
+      {/* WIDER MAIN CONTAINER */}
+      <main className="max-w-xl mx-auto p-4 flex-1 w-full">
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4 border border-gray-100 flex items-center justify-between">
           <Button
             variant="ghost"
@@ -1076,8 +1070,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
 
-          {/* LAYOUT FIX: Adjusted height to h-12 for better iPhone touch */}
-          <div className="grid grid-cols-[130px_1fr] gap-3 mb-4">
+          {/* IPHONE FIX: Rows stacked vertically, full width */}
+          <div className="space-y-4 mb-4">
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
@@ -1087,16 +1081,17 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 type="time" 
                 value={selectedTime} 
                 onChange={(e) => setSelectedTime(e.target.value)} 
-                className="h-12 text-base"
+                className="h-12 text-base w-full"
               />
             </div>
+            
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <User className="h-4 w-4" />
                 <span>Added by</span>
               </div>
               <Select value={selectedMember} onValueChange={setSelectedMember}>
-                <SelectTrigger className="h-12 text-base">
+                <SelectTrigger className="h-12 text-base w-full">
                   <SelectValue placeholder="Select member" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1117,7 +1112,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 <span>Grams *</span>
               </div>
               <Select value={amount} onValueChange={setAmount}>
-                <SelectTrigger className="h-12 text-base">
+                <SelectTrigger className="h-12 text-base w-full">
                   <SelectValue placeholder="Select amount" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1140,7 +1135,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
               placeholder="Quick note..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="h-12 text-base"
+              className="h-12 text-base w-full"
             />
           </div>
 
