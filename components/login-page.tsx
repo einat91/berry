@@ -112,10 +112,9 @@ export function LoginPage({ onLogin }: { onLogin: (user: any) => void }) {
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8 flex-1 flex flex-col justify-center">
         <div className="text-center">
+          {/* LOGO: Fixed - Removed the green background circle */}
           <div className="flex justify-center mb-4">
-            <div className="bg-teal-100 p-3 rounded-full">
-              <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} />
-            </div>
+              <Image src="/images/berry-logo.png" alt="Berry" width={150} height={50} />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Welcome to Berry</h1>
           <p className="text-gray-600 mt-2">Track your dog's daily activities with your family</p>
@@ -221,7 +220,7 @@ export function LoginPage({ onLogin }: { onLogin: (user: any) => void }) {
         </div>
       </div>
       
-      {/* FOOTER with Privacy Policy */}
+      {/* FOOTER with Privacy Policy - Kept small and subtle */}
       <div className="w-full text-center py-4 text-[10px] text-gray-400 space-x-2">
          <a href="https://www.iubenda.com/privacy-policy/65370946" className="iubenda-white iubenda-noiframe iubenda-embed iubenda-noiframe hover:underline" title="Privacy Policy">Privacy Policy</a>
          <span>•</span>
