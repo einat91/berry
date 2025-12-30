@@ -1,61 +1,51 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import type { Metadata, Viewport } from "next"
+import { DM_Sans } from "next/font/google" // CHANGED: Inter -> DM_Sans
 import "./globals.css"
+import { Toaster } from "@/components/ui/toaster"
+import Script from "next/script" // Added for Privacy Policy
 
-const inter = Inter({ subsets: ["latin"] })
+// Configure DM Sans font
+const dmSans = DM_Sans({ 
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  variable: "--font-dm-sans",
+})
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // Prevents zooming on iPhone inputs
+  themeColor: "#ffffff",
+}
 
 export const metadata: Metadata = {
-  title: "Berry - Dog Activity Tracker",
-  description: "Track your dog's daily activities with your family",
-  icons: {
-    icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon.svg", type: "image/svg+xml" },
-    ],
-    shortcut: "/favicon.ico",
-    apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180" },
-      { url: "/apple-touch-icon-152x152.png", sizes: "152x152" },
-      { url: "/apple-touch-icon-144x144.png", sizes: "144x144" },
-      { url: "/apple-touch-icon-120x120.png", sizes: "120x120" },
-    ],
-  },
+  title: "Berry - Dog Tracker",
+  description: "Track your dog's daily activities",
   manifest: "/manifest.json",
-  generator: "v0.dev",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "Berry",
-  },
-  formatDetection: {
-    telephone: false,
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-touch-icon.png",
   },
 }
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode
-}) {
+}>) {
   return (
     <html lang="en">
-      <head>
-        {/* iPhone/iPad app icons */}
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-        <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152x152.png" />
-        <link rel="apple-touch-icon" sizes="144x144" href="/apple-touch-icon-144x144.png" />
-        <link rel="apple-touch-icon" sizes="120x120" href="/apple-touch-icon-120x120.png" />
+      <body className={dmSans.className}>
+        {children}
+        <Toaster />
         
-        {/* PWA settings */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Berry" />
-        
-        {/* Prevent zooming */}
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-      </head>
-      <body className={inter.className}>{children}</body>
+        {/* Iubenda Privacy Policy Script loaded once globally */}
+        <Script 
+          src="https://cdn.iubenda.com/iubenda.js" 
+          strategy="lazyOnload" 
+        />
+      </body>
     </html>
   )
 }
