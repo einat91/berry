@@ -1,21 +1,21 @@
 import type { Metadata, Viewport } from "next"
-import { DM_Sans } from "next/font/google" // CHANGED: Inter -> DM_Sans
+import { Barlow } from "next/font/google" // CHANGED: DM_Sans -> Barlow
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
-import Script from "next/script" // Added for Privacy Policy
+import Script from "next/script"
 
-// Configure DM Sans font
-const dmSans = DM_Sans({ 
+// Configure Barlow font
+const barlow = Barlow({ 
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  variable: "--font-dm-sans",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-barlow",
 })
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false, // Prevents zooming on iPhone inputs
+  userScalable: false,
   themeColor: "#ffffff",
 }
 
@@ -36,11 +36,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={dmSans.className}>
+      <body className={barlow.className}>
         {children}
         <Toaster />
-        
-        {/* Iubenda Privacy Policy Script loaded once globally */}
         <Script 
           src="https://cdn.iubenda.com/iubenda.js" 
           strategy="lazyOnload" 
