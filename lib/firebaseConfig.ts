@@ -7,23 +7,23 @@ import { getStorage as getFirebaseStorage } from "firebase/storage"
 
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyAspERiSvjnYH021jsvo04n4kyz3LlP_R4",
-  authDomain: "berry-come-home.firebaseapp.com",
-  projectId: "berry-come-home",
-  storageBucket: "berry-come-home.firebasestorage.app",
-  messagingSenderId: "1071901322951",
-  appId: "1:1071901322951:web:c2b513babd415712b418e2",
-  measurementId: "G-79MK22LMPH",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 }
 
 // Initialize Firebase app
 const app = typeof window !== "undefined" ? (!getApps().length ? initializeApp(firebaseConfig) : getApp()) : null
 
 // Store Firebase instances
-let firebaseAuth = null
-let firebaseDb = null
-let firebaseStorage = null
-let googleProvider = null
+let firebaseAuth: any = null
+let firebaseDb: any = null
+let firebaseStorage: any = null
+let googleProvider: any = null
 let isInitialized = false
 
 // Initialize Firebase on client side
