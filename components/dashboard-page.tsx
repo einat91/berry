@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { DayPicker } from "react-day-picker" 
-import "react-day-picker/style.css";
+import 'react-day-picker/dist/style.css'; 
 
 interface UserType {
   id: string
@@ -166,6 +166,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [editAmount, setEditAmount] = useState("")
   const [editNote, setEditNote] = useState("")
   const [updatingEntry, setUpdatingEntry] = useState(false)
+  const [errorInfo, setErrorInfo] = useState<string | null>(null) // New Error State
   const { toast } = useToast()
 
   const swipeRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
@@ -175,7 +176,16 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
 
   useEffect(() => {
+    // FORCE STOP LOADING AFTER 4 SECONDS if database fails
+    const timer = setTimeout(() => {
+        if (loading) {
+            setLoading(false);
+            setErrorInfo("Connection Timed Out. Please check your Vercel Environment Variables.");
+        }
+    }, 4000);
+
     loadUserData()
+    return () => clearTimeout(timer);
   }, [])
 
   useEffect(() => {
@@ -270,21 +280,15 @@ export function DashboardPage({ user }: DashboardPageProps) {
         setFamilyMembers(formattedMembers)
         const familyIdentifier = userData.originalFamilyId || userDocSnap.id || user.id
         setFamilyId(familyIdentifier)
+        setErrorInfo(null); // Clear error if success
       } else {
-        toast({
-          title: "Setup Required",
-          description: "Please complete your family setup first.",
-          variant: "destructive",
-        })
+        setErrorInfo("Setup Required: Please complete your family setup first.");
       }
       setLoading(false)
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading user data:", error)
-      toast({
-        title: "Database Error",
-        description: "Failed to connect to Firebase. Check console for missing API keys.",
-        variant: "destructive",
-      })
+      // SHOW EXACT ERROR ON SCREEN
+      setErrorInfo(`Database Error: ${error.message || "Unknown error"}. Check API Keys.`);
       setLoading(false)
     }
   }
@@ -635,14 +639,33 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
           <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} className="mx-auto mb-4" />
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your family account...</p>
+          <p className="text-gray-600 mb-4">Loading your family account...</p>
+          {errorInfo && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm border border-red-200">
+              <strong>Error:</strong> {errorInfo}
+            </div>
+          )}
         </div>
       </div>
     )
+  }
+
+  // NOTE: If connection fails, show the error state rather than just "Setup Required"
+  if (errorInfo && !familyId) {
+    return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div className="text-center max-w-md">
+            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Connection Error</h2>
+            <p className="text-gray-600 mb-4">{errorInfo}</p>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </div>
+        </div>
+      )
   }
 
   if (!familyId) {
