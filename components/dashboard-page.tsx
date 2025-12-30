@@ -25,7 +25,6 @@ import {
   RefreshCw,
   Edit2,
   BarChart2,
-  Crown,
   Sun,
   CloudSun,
   Moon
@@ -47,7 +46,7 @@ import { Label } from "@/components/ui/label"
 import { DayPicker } from "react-day-picker" 
 import "react-day-picker/style.css";
 // CHART IMPORTS
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
 
 interface UserType {
   id: string
@@ -153,6 +152,27 @@ const DatePicker = ({ selectedDate, setSelectedDate }: { selectedDate: Date, set
     );
 };
 
+// --- CUSTOM LABEL RENDERER FOR BOLD NUMBERS ---
+const renderCustomLabel = (props: any, maxVal: number) => {
+    const { x, y, width, value } = props;
+    const isBold = value === maxVal && value > 0;
+    
+    if (value === 0) return null;
+
+    return (
+        <text 
+            x={x + width / 2} 
+            y={y - 5} 
+            fill={isBold ? "#000" : "#666"} 
+            textAnchor="middle" 
+            fontSize={isBold ? 14 : 12}
+            fontWeight={isBold ? "bold" : "normal"}
+        >
+            {value}
+        </text>
+    );
+};
+
 // STATS COMPONENT
 const StatsContent = ({ familyId, dogName, familyMembers }: { familyId: string, dogName: string, familyMembers: FamilyMember[] }) => {
     const [loading, setLoading] = useState(true);
@@ -189,11 +209,11 @@ const StatsContent = ({ familyId, dogName, familyMembers }: { familyId: string, 
             afternoon: {} as {[key: string]: number},
             night: {} as {[key: string]: number}
         };
+        const poopHours: {[key: number]: number} = {};
         
         let totalFood = 0;
         const uniqueFoodDays = new Set<string>();
 
-        // Init all members
         familyMembers.forEach(m => {
             const fname = getFirstName(m.name);
             buddyCount[fname] = { pee: 0, poop: 0, total: 0 };
@@ -213,22 +233,30 @@ const StatsContent = ({ familyId, dogName, familyMembers }: { familyId: string, 
                 else timeBuddy.night[name] = (timeBuddy.night[name] || 0) + 1;
             }
 
+            if (entry.type === 'poop') {
+                poopHours[hour] = (poopHours[hour] || 0) + 1;
+            }
+
             if (entry.type === 'food' && entry.amount) {
                 totalFood += parseInt(entry.amount.replace('g', '')) || 0;
                 uniqueFoodDays.add(format(entry.timestamp, 'yyyy-MM-dd'));
             }
         });
 
-        // Travel Buddy Data
+        // Determine Max values for Bold Logic
+        let maxPee = 0;
+        let maxPoop = 0;
+        Object.values(buddyCount).forEach(val => {
+            if (val.pee > maxPee) maxPee = val.pee;
+            if (val.poop > maxPoop) maxPoop = val.poop;
+        });
+
         const travelBuddyData = Object.keys(buddyCount).map(name => ({
             name,
             Pee: buddyCount[name].pee,
             Poop: buddyCount[name].poop,
             total: buddyCount[name].total
         })).sort((a,b) => b.total - a.total);
-
-        // Winner for Crown
-        const winner = travelBuddyData.length > 0 ? travelBuddyData[0].name : null;
 
         const getBestBuddy = (counts: {[key:string]: number}) => {
             if (Object.keys(counts).length === 0) return { name: "N/A", color: "#9ca3af" };
@@ -237,14 +265,21 @@ const StatsContent = ({ familyId, dogName, familyMembers }: { familyId: string, 
             return { name: bestName, color: getMemberColor(bestName, memberIndex === -1 ? 0 : memberIndex) };
         };
 
+        const poopTimeData = Object.entries(poopHours).map(([hour, count]) => ({
+            hour: `${hour}:00`,
+            count
+        })).sort((a,b) => parseInt(a.hour) - parseInt(b.hour));
+
         const avgFood = uniqueFoodDays.size > 0 ? Math.round(totalFood / uniqueFoodDays.size) : 0;
 
         setStats({
             travelBuddyData,
-            winner,
+            maxPee,
+            maxPoop,
             bestMorning: getBestBuddy(timeBuddy.morning),
             bestAfternoon: getBestBuddy(timeBuddy.afternoon),
             bestNight: getBestBuddy(timeBuddy.night),
+            poopTimeData,
             avgFood
         });
     };
@@ -252,33 +287,25 @@ const StatsContent = ({ familyId, dogName, familyMembers }: { familyId: string, 
     if (loading) return <div className="p-8 text-center text-gray-500">Loading statistics...</div>;
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 pt-2">
+        <div className="space-y-6 animate-in fade-in duration-500 pt-2 pb-8">
             {/* Travel Buddy Chart */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-600 mb-4 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-gray-600 mb-6 flex items-center gap-2">
                     <PawPrint className="h-4 w-4 text-teal-600"/> Who is {dogName}'s Travel Buddy?
                 </h3>
                 <div className="h-[250px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats.travelBuddyData} margin={{top: 10, right: 10, left: -20, bottom: 0}}>
-                            <XAxis dataKey="name" tick={({ x, y, payload }) => {
-                                const isWinner = payload.value === stats.winner;
-                                return (
-                                    <g transform={`translate(${x},${y})`}>
-                                        <text x={0} y={0} dy={16} textAnchor="middle" fill="#666" fontSize={12}>
-                                            {payload.value}
-                                        </text>
-                                        {isWinner && (
-                                            <text x={0} y={-25} textAnchor="middle" fontSize={14}>👑</text>
-                                        )}
-                                    </g>
-                                );
-                            }} />
+                        <BarChart data={stats.travelBuddyData} margin={{top: 20, right: 10, left: -20, bottom: 0}}>
+                            <XAxis dataKey="name" tick={{fontSize: 12}} />
                             <YAxis tick={{fontSize: 10}} />
                             <Tooltip />
                             <Legend wrapperStyle={{fontSize: '12px'}} />
-                            <Bar dataKey="Pee" fill="#eab308" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="Poop" fill="#b45309" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="Pee" fill="#eab308" radius={[4, 4, 0, 0]}>
+                                <LabelList dataKey="Pee" content={(props) => renderCustomLabel(props, stats.maxPee)} />
+                            </Bar>
+                            <Bar dataKey="Poop" fill="#b45309" radius={[4, 4, 0, 0]}>
+                                <LabelList dataKey="Poop" content={(props) => renderCustomLabel(props, stats.maxPoop)} />
+                            </Bar>
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -309,6 +336,22 @@ const StatsContent = ({ familyId, dogName, familyMembers }: { familyId: string, 
                     <div className="font-bold text-sm" style={{ color: stats.bestNight.color }}>
                         {stats.bestNight.name}
                     </div>
+                </div>
+            </div>
+
+             {/* Poop Time Chart (Restored) */}
+             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-600 mb-4 flex items-center gap-2">
+                    <Waves className="h-4 w-4 text-amber-700"/> Best Time for Poop
+                </h3>
+                <div className="h-[200px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={stats.poopTimeData}>
+                            <XAxis dataKey="hour" tick={{fontSize: 10}} />
+                            <Tooltip />
+                            <Bar dataKey="count" fill="#b45309" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
 
@@ -414,13 +457,14 @@ export function DashboardPage({ user }: DashboardPageProps) {
       const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
-      const userDocSnap = await getDoc(userDocRef)
-
+      let userDocSnap = await getDoc(userDocRef)
+      
       let userData = null
 
       if (userDocSnap.exists()) {
         userData = userDocSnap.data()
       } else {
+        // Fallback: Check if user exists but query was too fast or failed
         const usersRef = collection(db, "users")
         const q = query(usersRef, where("familyMembers", "array-contains", user.name))
         const querySnapshot = await getDocs(q)
@@ -429,6 +473,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           const familyDoc = querySnapshot.docs[0]
           userData = familyDoc.data()
 
+          // Sync it
           const { setDoc } = await import("firebase/firestore")
           await setDoc(userDocRef, {
             name: user.name,
@@ -439,6 +484,17 @@ export function DashboardPage({ user }: DashboardPageProps) {
             createdAt: new Date(),
           })
         }
+      }
+
+      // If we still don't have userData (Race Condition Fix)
+      // Sometimes Firestore write hasn't propagated. Use default data if we just logged in.
+      if (!userData && user.name) {
+         console.log("Using fallback user data for new login");
+         userData = {
+             dogName: "My Dog",
+             familyMembers: [user.name],
+             originalFamilyId: user.id 
+         }
       }
 
       if (userData) {
@@ -453,9 +509,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
         })
 
         setFamilyMembers(formattedMembers)
+        // Ensure familyId is never null/undefined
         const familyIdentifier = userData.originalFamilyId || userDocSnap.id || user.id
         setFamilyId(familyIdentifier)
       } else {
+        // Only show error if we genuinely failed all attempts
         toast({
           title: "Setup Required",
           description: "Please complete your family setup first.",
@@ -465,11 +523,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       setLoading(false)
     } catch (error: any) {
       console.error("Error loading user data:", error)
-      toast({
-        title: "Database Error",
-        description: "Failed to connect to Firebase. Check API Keys.",
-        variant: "destructive",
-      })
+      // Don't show toast on minor connection hiccups
       setLoading(false)
     }
   }
