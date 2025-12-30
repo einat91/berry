@@ -40,7 +40,8 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { DayPicker } from "react-day-picker" 
-import 'react-day-picker/dist/style.css'; 
+// FIXED: Correct CSS import for react-day-picker v9
+import "react-day-picker/style.css";
 
 interface UserType {
   id: string
@@ -166,7 +167,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [editAmount, setEditAmount] = useState("")
   const [editNote, setEditNote] = useState("")
   const [updatingEntry, setUpdatingEntry] = useState(false)
-  const [errorInfo, setErrorInfo] = useState<string | null>(null) // New Error State
+  const [errorInfo, setErrorInfo] = useState<string | null>(null) 
   const { toast } = useToast()
 
   const swipeRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
@@ -176,7 +177,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
 
   useEffect(() => {
-    // FORCE STOP LOADING AFTER 4 SECONDS if database fails
+    // FORCE STOP LOADING AFTER 4 SECONDS
     const timer = setTimeout(() => {
         if (loading) {
             setLoading(false);
@@ -280,14 +281,13 @@ export function DashboardPage({ user }: DashboardPageProps) {
         setFamilyMembers(formattedMembers)
         const familyIdentifier = userData.originalFamilyId || userDocSnap.id || user.id
         setFamilyId(familyIdentifier)
-        setErrorInfo(null); // Clear error if success
+        setErrorInfo(null);
       } else {
         setErrorInfo("Setup Required: Please complete your family setup first.");
       }
       setLoading(false)
     } catch (error: any) {
       console.error("Error loading user data:", error)
-      // SHOW EXACT ERROR ON SCREEN
       setErrorInfo(`Database Error: ${error.message || "Unknown error"}. Check API Keys.`);
       setLoading(false)
     }
@@ -654,7 +654,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
     )
   }
 
-  // NOTE: If connection fails, show the error state rather than just "Setup Required"
   if (errorInfo && !familyId) {
     return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
