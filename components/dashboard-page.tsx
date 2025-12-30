@@ -1067,7 +1067,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-4 w-4 text-gray-600" />
-            <h2 className="text-base text-gray-600">Today's Summary</h2>
+            <h2 className="text-base font-bold text-gray-800">Today's Summary</h2>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
@@ -1086,7 +1086,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <h2 className="text-base text-gray-600 mb-6">Log Activity</h2>
+          <h2 className="text-base font-bold text-gray-800 mb-6">Log Activity</h2>
 
           <div className="grid grid-cols-3 gap-4 mb-6">
             <button
@@ -1208,7 +1208,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base text-gray-600">Activities</h2>
+            <h2 className="text-base font-bold text-gray-800">Activities</h2>
             {loadingEntries && (
               <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-300"></div>
             )}
