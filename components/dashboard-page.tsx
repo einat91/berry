@@ -40,7 +40,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { DayPicker } from "react-day-picker" 
-// FIXED: Correct CSS import for react-day-picker v9
+// FIXED: Correct import path for react-day-picker v8/v9 compatibility
 import "react-day-picker/style.css";
 
 interface UserType {
@@ -77,12 +77,15 @@ interface DashboardPageProps {
   user: UserType
 }
 
+// Food amount options
 const FOOD_AMOUNTS = [25, 50, 75, 100, 125, 150, 175, 200]
 
+// Helper function to ensure only first name is displayed
 const getFirstName = (name: string) => {
   return name ? name.split(" ")[0] : name
 }
 
+// NEW COMPONENT: DatePicker with Gray/Black Theme
 const DatePicker = ({ selectedDate, setSelectedDate }: { selectedDate: Date, setSelectedDate: (date: Date) => void }) => {
     const [isOpen, setIsOpen] = useState(false);
     
@@ -93,6 +96,7 @@ const DatePicker = ({ selectedDate, setSelectedDate }: { selectedDate: Date, set
         }
     }
 
+    // DESIGN: Gray/Black/Neutral Theme
     const dayPickerClassNames = {
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
@@ -108,6 +112,7 @@ const DatePicker = ({ selectedDate, setSelectedDate }: { selectedDate: Date, set
         row: "flex w-full mt-2",
         cell: "text-center text-sm p-0 relative [&:has([aria-selected])]:bg-gray-100 first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
         day: "h-9 w-9 p-0 font-normal aria-selected:opacity-100 rounded-md hover:bg-gray-100 transition-colors text-gray-900",
+        // SELECTED STATE: Black background, White text
         day_selected: "bg-gray-900 text-white hover:bg-gray-800 hover:text-white focus:bg-gray-900 focus:text-white",
         day_today: "bg-gray-100 text-gray-900 font-bold",
         day_outside: "text-gray-300 opacity-50",
@@ -159,7 +164,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [newMemberName, setNewMemberName] = useState("")
   const [newMemberEmail, setNewMemberEmail] = useState("")
   const [addingMember, setAddingMember] = useState(false)
-  const [amount, setAmount] = useState("75")
+  const [amount, setAmount] = useState("75") 
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
   const [dailySummary, setDailySummary] = useState<DailySummary>({ totalPee: 0, totalPoop: 0, totalFood: 0 })
   const [loggingOut, setLoggingOut] = useState(false)
@@ -167,7 +172,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [editAmount, setEditAmount] = useState("")
   const [editNote, setEditNote] = useState("")
   const [updatingEntry, setUpdatingEntry] = useState(false)
-  const [errorInfo, setErrorInfo] = useState<string | null>(null) 
   const { toast } = useToast()
 
   const swipeRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
@@ -177,16 +181,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
 
   useEffect(() => {
-    // FORCE STOP LOADING AFTER 4 SECONDS
-    const timer = setTimeout(() => {
-        if (loading) {
-            setLoading(false);
-            setErrorInfo("Connection Timed Out. Please check your Vercel Environment Variables.");
-        }
-    }, 4000);
-
     loadUserData()
-    return () => clearTimeout(timer);
   }, [])
 
   useEffect(() => {
@@ -281,14 +276,21 @@ export function DashboardPage({ user }: DashboardPageProps) {
         setFamilyMembers(formattedMembers)
         const familyIdentifier = userData.originalFamilyId || userDocSnap.id || user.id
         setFamilyId(familyIdentifier)
-        setErrorInfo(null);
       } else {
-        setErrorInfo("Setup Required: Please complete your family setup first.");
+        toast({
+          title: "Setup Required",
+          description: "Please complete your family setup first.",
+          variant: "destructive",
+        })
       }
       setLoading(false)
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error loading user data:", error)
-      setErrorInfo(`Database Error: ${error.message || "Unknown error"}. Check API Keys.`);
+      toast({
+        title: "Database Error",
+        description: "Failed to load your family data. Please check your connection and try again.",
+        variant: "destructive",
+      })
       setLoading(false)
     }
   }
@@ -639,32 +641,14 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Image src="/images/berry-logo.png" alt="Berry" width={120} height={40} className="mx-auto mb-4" />
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300 mx-auto mb-4"></div>
-          <p className="text-gray-600 mb-4">Loading your family account...</p>
-          {errorInfo && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm border border-red-200">
-              <strong>Error:</strong> {errorInfo}
-            </div>
-          )}
+          <p className="text-gray-600">Loading your family account...</p>
         </div>
       </div>
     )
-  }
-
-  if (errorInfo && !familyId) {
-    return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-          <div className="text-center max-w-md">
-            <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Connection Error</h2>
-            <p className="text-gray-600 mb-4">{errorInfo}</p>
-            <Button onClick={() => window.location.reload()}>Retry</Button>
-          </div>
-        </div>
-      )
   }
 
   if (!familyId) {
