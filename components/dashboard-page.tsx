@@ -39,9 +39,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { DayPicker } from "react-day-picker" 
-// FIXED: Correct import path for react-day-picker v8/v9 compatibility
-import "react-day-picker/style.css";
 
 interface UserType {
   id: string
@@ -85,69 +82,6 @@ const getFirstName = (name: string) => {
   return name ? name.split(" ")[0] : name
 }
 
-// NEW COMPONENT: DatePicker with Gray/Black Theme
-const DatePicker = ({ selectedDate, setSelectedDate }: { selectedDate: Date, setSelectedDate: (date: Date) => void }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    
-    const handleSelect = (date: Date | undefined) => {
-        if (date) {
-            setSelectedDate(date);
-            setIsOpen(false);
-        }
-    }
-
-    // DESIGN: Gray/Black/Neutral Theme
-    const dayPickerClassNames = {
-        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-        month: "space-y-4",
-        caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium text-gray-900",
-        nav: "space-x-1 flex items-center",
-        nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 text-gray-900",
-        nav_button_previous: "absolute left-1",
-        nav_button_next: "absolute right-1",
-        table: "w-full border-collapse space-y-1",
-        head_row: "flex",
-        head_cell: "text-gray-500 rounded-md w-9 font-normal text-[0.8rem]",
-        row: "flex w-full mt-2",
-        cell: "text-center text-sm p-0 relative [&:has([aria-selected])]:bg-gray-100 first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-        day: "h-9 w-9 p-0 font-normal aria-selected:opacity-100 rounded-md hover:bg-gray-100 transition-colors text-gray-900",
-        // SELECTED STATE: Black background, White text
-        day_selected: "bg-gray-900 text-white hover:bg-gray-800 hover:text-white focus:bg-gray-900 focus:text-white",
-        day_today: "bg-gray-100 text-gray-900 font-bold",
-        day_outside: "text-gray-300 opacity-50",
-        day_disabled: "text-gray-300 opacity-50",
-        day_range_middle: "aria-selected:bg-gray-100 aria-selected:text-gray-900",
-        day_hidden: "invisible",
-    };
-
-    return (
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogTrigger asChild>
-                <button className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors px-3 py-1 rounded-md hover:bg-gray-100">
-                    <CalendarIcon className="h-4 w-4" />
-                    <div className="text-sm font-medium">{format(selectedDate, "dd/MM/yyyy")}</div>
-                </button>
-            </DialogTrigger>
-            <DialogContent className="w-auto p-4 bg-white rounded-xl border-0 shadow-lg">
-                <DayPicker
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={handleSelect}
-                    showOutsideDays={true}
-                    disabled={(date) => date > new Date()} 
-                    initialFocus
-                    classNames={dayPickerClassNames}
-                    components={{
-                        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
-                        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
-                    }}
-                />
-            </DialogContent>
-        </Dialog>
-    );
-};
-
 export function DashboardPage({ user }: DashboardPageProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [entries, setEntries] = useState<Entry[]>([])
@@ -164,15 +98,16 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const [newMemberName, setNewMemberName] = useState("")
   const [newMemberEmail, setNewMemberEmail] = useState("")
   const [addingMember, setAddingMember] = useState(false)
-  const [amount, setAmount] = useState("75") 
+  const [amount, setAmount] = useState("50") // Default to 50g
   const [showFamilyDialog, setShowFamilyDialog] = useState(false)
   const [dailySummary, setDailySummary] = useState<DailySummary>({ totalPee: 0, totalPoop: 0, totalFood: 0 })
   const [loggingOut, setLoggingOut] = useState(false)
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null)
   const [editAmount, setEditAmount] = useState("")
-  const [editNote, setEditNote] = useState("")
+  const [editNote, setEditNote] = useState("") // Declare editNote variable
   const [updatingEntry, setUpdatingEntry] = useState(false)
   const { toast } = useToast()
+  const db = getDb() // Declare db variable
 
   const swipeRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const [swipedEntryId, setSwipedEntryId] = useState<string | null>(null)
@@ -192,16 +127,9 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   useEffect(() => {
     if (familyMembers.length > 0 && !selectedMember) {
-        const currentUserName = getFirstName(user.name);
-        const currentUserInFamily = familyMembers.find(member => getFirstName(member.name) === currentUserName);
-        
-        if (currentUserInFamily) {
-            setSelectedMember(currentUserName);
-        } else {
-            setSelectedMember(getFirstName(familyMembers[0]?.name || ""));
-        }
+      setSelectedMember(getFirstName(familyMembers[0]?.name || ""))
     }
-  }, [familyMembers, selectedMember, user.name])
+  }, [familyMembers])
 
   useEffect(() => {
     calculateDailySummary()
@@ -231,7 +159,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const loadUserData = async () => {
     try {
-      const db = await getDb()
       const { doc, getDoc, collection, query, where, getDocs } = await import("firebase/firestore")
 
       const userDocRef = doc(db, "users", user.id)
@@ -274,7 +201,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
         })
 
         setFamilyMembers(formattedMembers)
+
+        // Use originalFamilyId if it exists (for joined families), otherwise use user's document ID
         const familyIdentifier = userData.originalFamilyId || userDocSnap.id || user.id
+        console.log("🏠 Using family ID for activities:", familyIdentifier)
         setFamilyId(familyIdentifier)
       } else {
         toast({
@@ -300,7 +230,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setLoadingEntries(true)
-      const db = await getDb()
       const { collection, query, where, getDocs } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
@@ -315,9 +244,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
         timestamp: doc.data().timestamp.toDate(),
       })) as Entry[]
 
+      // Sort by timestamp - newest first (most recent time at top)
       loadedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
       setEntries(loadedEntries)
+      console.log(`Loaded ${loadedEntries.length} entries for ${dateKey}`)
     } catch (error) {
       console.error("Error loading entries:", error)
       toast({
@@ -343,7 +274,6 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
     try {
       setSaving(true)
-      const db = await getDb()
       const { collection, addDoc, Timestamp } = await import("firebase/firestore")
 
       const dateKey = format(selectedDate, "yyyy-MM-dd")
@@ -374,6 +304,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
         id: docRef.id,
       }
 
+      // Add to state and sort immediately to ensure newest appears at top
       setEntries((prevEntries) => {
         const updatedEntries = [newEntryWithId, ...prevEntries]
         return updatedEntries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
@@ -382,9 +313,22 @@ export function DashboardPage({ user }: DashboardPageProps) {
       return true
     } catch (error) {
       console.error("❌ Error saving entry:", error)
+
+      let errorMessage = "Failed to save activity. "
+
+      if (error.code === "permission-denied") {
+        errorMessage += "Database permission denied. Please check Firebase rules."
+      } else if (error.code === "unavailable") {
+        errorMessage += "Database temporarily unavailable. Please try again."
+      } else if (error.message?.includes("offline")) {
+        errorMessage += "You're offline. Please check your internet connection."
+      } else {
+        errorMessage += "Please check your connection and try again."
+      }
+
       toast({
         title: "Save Failed",
-        description: "Please check your connection and try again.",
+        description: errorMessage,
         variant: "destructive",
       })
       return false
@@ -395,22 +339,38 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const handleLogActivities = async () => {
     if (selectedActivities.size === 0) {
-      toast({ title: "Select an activity", description: "Please select at least one activity type", variant: "destructive" })
+      toast({
+        title: "Select an activity",
+        description: "Please select at least one activity type",
+        variant: "destructive",
+      })
       return
     }
 
     if (!selectedMember) {
-      toast({ title: "Select a family member", description: "Please select who is logging this activity", variant: "destructive" })
+      toast({
+        title: "Select a family member",
+        description: "Please select who is logging this activity",
+        variant: "destructive",
+      })
       return
     }
 
     if (selectedActivities.has("food") && !amount) {
-      toast({ title: "Select food amount", description: "Please select the amount of food in grams", variant: "destructive" })
+      toast({
+        title: "Select food amount",
+        description: "Please select the amount of food in grams",
+        variant: "destructive",
+      })
       return
     }
 
     if (selectedDate > new Date()) {
-      toast({ title: "Cannot log future activities", description: "You can only log activities for today or past dates", variant: "destructive" })
+      toast({
+        title: "Cannot log future activities",
+        description: "You can only log activities for today or past dates",
+        variant: "destructive",
+      })
       return
     }
 
@@ -445,23 +405,34 @@ export function DashboardPage({ user }: DashboardPageProps) {
         title: "Activities Saved",
         description: `${successCount} ${successCount === 1 ? "activity" : "activities"} saved successfully!`,
       })
+
+      // Reset form
       setSelectedActivities(new Set())
-      setAmount("75") 
+      setAmount("50") // Reset to default
       setNote("")
     }
   }
 
   const deleteEntry = async (entryId: string) => {
     try {
-      const db = await getDb()
       const { doc, deleteDoc } = await import("firebase/firestore")
+
       await deleteDoc(doc(db, "entries", entryId))
+
       setEntries((prev) => prev.filter((entry) => entry.id !== entryId))
       setSwipedEntryId(null)
-      toast({ title: "Activity Deleted", description: "Activity has been removed successfully." })
+
+      toast({
+        title: "Activity Deleted",
+        description: "Activity has been removed successfully.",
+      })
     } catch (error) {
       console.error("Error deleting entry:", error)
-      toast({ title: "Delete Failed", description: "Could not delete activity.", variant: "destructive" })
+      toast({
+        title: "Delete Failed",
+        description: "Could not delete activity. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -476,21 +447,19 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const handleTouchEnd = (entryId: string) => {
     if (!touchStart || !touchEnd) return
+
     const distance = touchStart - touchEnd
-    const isLeftSwipe = distance > 50 
-    const isRightSwipe = distance < -50 
+    const isLeftSwipe = distance > 50
+    const isRightSwipe = distance < -50
 
     if (isLeftSwipe) {
       setSwipedEntryId(entryId)
-      setSwipeDirection("left") 
+      setSwipeDirection("left")
     } else if (isRightSwipe) {
       const entry = entries.find((e) => e.id === entryId)
       if (entry?.type === "food") {
         setSwipedEntryId(entryId)
-        setSwipeDirection("right") 
-      } else {
-        setSwipedEntryId(null)
-        setSwipeDirection(null)
+        setSwipeDirection("right")
       }
     } else {
       setSwipedEntryId(null)
@@ -510,98 +479,183 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const getActivityIcon = (type: "pee" | "poop" | "food") => {
     switch (type) {
-      case "pee": return <Droplets className="h-5 w-5" />
-      case "poop": return <Waves className="h-5 w-5" />
-      case "food": return <Utensils className="h-5 w-5" />
+      case "pee":
+        return <Droplets className="h-5 w-5" />
+      case "poop":
+        return <Waves className="h-5 w-5" />
+      case "food":
+        return <Utensils className="h-5 w-5" />
     }
   }
 
   const getActivityColor = (type: "pee" | "poop" | "food") => {
     switch (type) {
-      case "pee": return "bg-yellow-500 text-white"
-      case "poop": return "bg-amber-700 text-white"
-      case "food": return "bg-teal-500 text-white"
+      case "pee":
+        return "bg-yellow-500 text-white"
+      case "poop":
+        return "bg-amber-700 text-white"
+      case "food":
+        return "bg-teal-500 text-white"
     }
   }
 
   const handleSignOut = async () => {
     try {
       setLoggingOut(true)
+      toast({
+        title: "Logging out...",
+        description: "Please wait while we sign you out.",
+      })
       const auth: any = await getAuth()
       const { signOut } = await import("firebase/auth")
       await signOut(auth)
     } catch (error) {
       console.error("Error signing out:", error)
-      toast({ title: "Sign Out Error", description: "Could not sign out.", variant: "destructive" })
+      toast({
+        title: "Sign Out Error",
+        description: "Could not sign out. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setLoggingOut(false)
     }
   }
 
-  const goToPreviousDay = () => setSelectedDate(subDays(selectedDate, 1))
-  const goToNextDay = () => setSelectedDate(addDays(selectedDate, 1))
-  const goToToday = () => setSelectedDate(new Date())
+  const goToPreviousDay = () => {
+    setSelectedDate(subDays(selectedDate, 1))
+  }
+
+  const goToNextDay = () => {
+    setSelectedDate(addDays(selectedDate, 1))
+  }
+
+  const goToToday = () => {
+    setSelectedDate(new Date())
+  }
 
   const addFamilyMember = async () => {
-    if (!newMemberName.trim()) return
+    if (!newMemberName.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter a name for the family member",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       setAddingMember(true)
-      const db = await getDb()
       const { doc, updateDoc, arrayUnion } = await import("firebase/firestore")
+
       const userDocRef = doc(db, "users", user.id)
       const newMember = {
         name: getFirstName(newMemberName.trim()),
         ...(newMemberEmail.trim() && { email: newMemberEmail.trim() }),
       }
-      await updateDoc(userDocRef, { familyMembers: arrayUnion(newMember) })
+
+      await updateDoc(userDocRef, {
+        familyMembers: arrayUnion(newMember),
+      })
+
       setFamilyMembers((prev) => [...prev, newMember])
       setNewMemberName("")
       setNewMemberEmail("")
-      toast({ title: "Family Member Added", description: `${getFirstName(newMemberName.trim())} has been added.` })
+
+      toast({
+        title: "Family Member Added",
+        description: `${getFirstName(newMemberName.trim())} has been added to your family.`,
+      })
     } catch (error) {
-      toast({ title: "Failed to Add Member", description: "Could not add family member.", variant: "destructive" })
+      console.error("Error adding family member:", error)
+      toast({
+        title: "Failed to Add Member",
+        description: "Could not add family member. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setAddingMember(false)
     }
   }
 
   const removeFamilyMember = async (memberToRemove: FamilyMember) => {
-    if (familyMembers.length <= 1) return
+    if (familyMembers.length <= 1) {
+      toast({
+        title: "Cannot Remove",
+        description: "You need at least one family member.",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
-      const db = await getDb()
       const { doc, updateDoc } = await import("firebase/firestore")
+
       const userDocRef = doc(db, "users", user.id)
       const updatedMembers = familyMembers.filter(
         (m) => m.name !== memberToRemove.name || m.email !== memberToRemove.email,
       )
-      await updateDoc(userDocRef, { familyMembers: updatedMembers })
+
+      await updateDoc(userDocRef, {
+        familyMembers: updatedMembers,
+      })
+
       setFamilyMembers(updatedMembers)
-      toast({ title: "Family Member Removed", description: `${getFirstName(memberToRemove.name)} has been removed.` })
+
+      toast({
+        title: "Family Member Removed",
+        description: `${getFirstName(memberToRemove.name)} has been removed from your family.`,
+      })
     } catch (error) {
-      toast({ title: "Failed to Remove Member", description: "Could not remove family member.", variant: "destructive" })
+      console.error("Error removing family member:", error)
+      toast({
+        title: "Failed to Remove Member",
+        description: "Could not remove family member. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
   const updateEntry = async (entryId: string) => {
     try {
       setUpdatingEntry(true)
-      const db = await getDb()
       const { doc, updateDoc } = await import("firebase/firestore")
+
       const updateData: any = {}
+
       if (editAmount && editAmount !== editingEntry?.amount) {
-        updateData.amount = editAmount.endsWith('g') ? editAmount : `${editAmount}g` 
+        updateData.amount = editAmount
       }
+
       if (editNote !== editingEntry?.notes) {
         updateData.notes = editNote.trim() || null
       }
+
       if (Object.keys(updateData).length > 0) {
         await updateDoc(doc(db, "entries", entryId), updateData)
-        setEntries((prev) => prev.map((entry) => entry.id === entryId ? { ...entry, amount: updateData.amount || entry.amount, notes: updateData.notes || entry.notes } : entry))
-        toast({ title: "Activity Updated", description: "Updated successfully!" })
+
+        // Update local state
+        setEntries((prev) =>
+          prev.map((entry) =>
+            entry.id === entryId
+              ? { ...entry, amount: updateData.amount || entry.amount, notes: updateData.notes || entry.notes }
+              : entry,
+          ),
+        )
+
+        toast({
+          title: "Activity Updated",
+          description: "Your activity has been updated successfully!",
+        })
       }
+
       setEditingEntry(null)
     } catch (error) {
-      toast({ title: "Update Failed", description: "Could not update activity.", variant: "destructive" })
+      console.error("Error updating entry:", error)
+      toast({
+        title: "Update Failed",
+        description: "Could not update activity. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setUpdatingEntry(false)
     }
@@ -609,8 +663,8 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   const openEditModal = (entry: Entry) => {
     setEditingEntry(entry)
-    setEditAmount(entry.amount ? entry.amount.replace('g', '') : "") 
-    setEditNote(entry.notes || "") 
+    setEditAmount(entry.amount || "")
+    setEditNote(entry.notes || "") // Initialize editNote with entry notes
     setSwipedEntryId(null)
     setSwipeDirection(null)
   }
@@ -618,24 +672,37 @@ export function DashboardPage({ user }: DashboardPageProps) {
   const closeEditModal = () => {
     setEditingEntry(null)
     setEditAmount("")
-    setEditNote("") 
+    setEditNote("") // Reset editNote when closing modal
   }
 
   const saveEdit = async () => {
     if (!editingEntry) return
+
     try {
-      const db = await getDb()
       const { doc, updateDoc } = await import("firebase/firestore")
-      const newAmountWithG = editAmount.endsWith('g') ? editAmount : `${editAmount}g`;
       await updateDoc(doc(db, "entries", editingEntry.id), {
-        amount: newAmountWithG,
-        notes: editNote.trim() || null, 
+        amount: editAmount,
+        notes: editNote.trim() || null, // Include notes in update
       })
-      setEntries((prev) => prev.map((entry) => entry.id === editingEntry.id ? { ...entry, amount: newAmountWithG, notes: editNote.trim() || null } : entry))
+
+      setEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === editingEntry.id ? { ...entry, amount: editAmount, notes: editNote.trim() || null } : entry,
+        ),
+      )
+
       closeEditModal()
-      toast({ title: "Activity Updated", description: "Updated successfully." })
+      toast({
+        title: "Activity Updated",
+        description: "Amount and note have been updated successfully.",
+      })
     } catch (error) {
-      toast({ title: "Update Failed", description: "Could not update activity.", variant: "destructive" })
+      console.error("Error updating entry:", error)
+      toast({
+        title: "Update Failed",
+        description: "Could not update activity. Please check your connection and try again.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -668,6 +735,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Header */}
       <header className="bg-white p-4 border-b border-gray-100">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -786,6 +854,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
       </header>
 
       <main className="max-w-md mx-auto p-4">
+        {/* Date Navigation */}
         <div className="bg-white rounded-xl p-4 shadow-sm mb-4 border border-gray-100 flex items-center justify-between">
           <Button
             variant="ghost"
@@ -795,7 +864,10 @@ export function DashboardPage({ user }: DashboardPageProps) {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <DatePicker selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+          <div className="flex items-center gap-2 text-gray-600">
+            <CalendarIcon className="h-4 w-4" />
+            <div className="text-sm">{format(selectedDate, "dd/MM/yyyy")}</div>
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -807,6 +879,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </Button>
         </div>
 
+        {/* Welcome Message with Dog Name */}
         <div className="text-center mb-6">
           <div className="flex items-center justify-center gap-2 mb-2">
             <PawPrint className="h-6 w-6 text-gray-600" />
@@ -814,6 +887,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           <h1 className="text-xl font-bold text-gray-700">Welcome, {dogName}'s family!</h1>
         </div>
 
+        {/* Daily Summary - Updated with consistent text size */}
         <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-4 w-4 text-gray-600" />
@@ -835,9 +909,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </div>
         </div>
 
+        {/* Log Activity Card */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-base text-gray-600 mb-6">Log Activity</h2>
 
+          {/* Activity Type Buttons - Multiple Selection */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <button
               className={`h-20 flex flex-col items-center justify-center gap-2 rounded-lg border transition-colors ${
@@ -874,18 +950,14 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </button>
           </div>
 
-          {/* LAYOUT FIX: Rigid Grid (130px for Time, Rest for Added By) to Prevent Overlap */}
-          <div className="grid grid-cols-[130px_1fr] gap-3 mb-4">
+          {/* Time and Added By */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Clock className="h-4 w-4" />
                 <span>Time</span>
               </div>
-              <Input 
-                type="time" 
-                value={selectedTime} 
-                onChange={(e) => setSelectedTime(e.target.value)} 
-              />
+              <Input type="time" value={selectedTime} onChange={(e) => setSelectedTime(e.target.value)} />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
@@ -907,6 +979,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </div>
           </div>
 
+          {/* Amount - Food dropdown with predefined values */}
           {selectedActivities.has("food") && (
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
@@ -928,6 +1001,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
             </div>
           )}
 
+          {/* Note */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
               <FileText className="h-4 w-4" />
@@ -937,9 +1011,11 @@ export function DashboardPage({ user }: DashboardPageProps) {
               placeholder="Quick note..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
+              className="text-sm"
             />
           </div>
 
+          {/* Log Button */}
           <Button
             className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3"
             onClick={handleLogActivities}
@@ -953,6 +1029,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
           </Button>
         </div>
 
+        {/* Activities */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base text-gray-600">Activities</h2>
@@ -997,7 +1074,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                       {entry.notes && <div className="text-xs text-gray-500 mt-1">{entry.notes}</div>}
                     </div>
                     <div className="text-right">
-                      <div className="text-sm text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
+                      <div className="text-xs text-gray-600">{format(entry.timestamp, "HH:mm")}</div>
                     </div>
                   </div>
 
@@ -1012,6 +1089,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                     </div>
                   )}
 
+                  {/* Delete button revealed on left swipe */}
                   {swipedEntryId === entry.id && swipeDirection === "left" && (
                     <div className="absolute right-0 top-0 h-full flex items-center">
                       <Button
@@ -1049,6 +1127,7 @@ export function DashboardPage({ user }: DashboardPageProps) {
                 placeholder="Quick note..."
                 value={editNote}
                 onChange={(e) => setEditNote(e.target.value)}
+                className="text-sm"
               />
             </div>
             <div className="flex gap-2">

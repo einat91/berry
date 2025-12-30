@@ -1,7 +1,7 @@
 {
-  "name": "Berry: Pet Care Tracker",
+  "name": "Berry - Dog Activity Tracker",
   "short_name": "Berry",
-  "description": "Track your pet's daily activities with your family",
+  "description": "Track your dog's daily activities with your family",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f9fafb",
