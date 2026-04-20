@@ -7,7 +7,7 @@ import { getStorage as getFirebaseStorage } from "firebase/storage"
 
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyAspERiSvjnYH021jsvo04n4kyz3LlP_R4",
+  apiKey: "AIzaSyBpi3fVfntvNA7Gcr9B6OJ-VRTVsCojW5s",
   authDomain: "berry-come-home.firebaseapp.com",
   projectId: "berry-come-home",
   storageBucket: "berry-come-home.firebasestorage.app",
